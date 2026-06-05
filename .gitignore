@@ -1,0 +1,20 @@
+# Binaries
+/vulpea-serve
+*.exe
+*.test
+*.out
+
+# Go
+/vendor/
+go.work
+go.work.sum
+
+# Local config / secrets
+.env
+*.local
+
+# Editor / OS
+.DS_Store
+*~
+\#*\#
+.#*
