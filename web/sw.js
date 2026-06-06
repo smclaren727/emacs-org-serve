@@ -1,7 +1,7 @@
-// Minimal offline cache: cache-first for the app shell, network-first for the
-// contacts API (fresh when online, last-known when offline).
-const CACHE = 'vulpea-contacts-v1';
-const SHELL = ['./', 'index.html', 'manifest.json', 'icon.svg'];
+// Offline cache: cache-first for the app shell, network-first for the JSON APIs
+// (fresh when online, last-known when offline — including notes you've opened).
+const CACHE = 'vulpea-v2';
+const SHELL = ['./', 'index.html', 'notes.html', 'app.css', 'manifest.json', 'icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -20,7 +20,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  if (url.pathname.endsWith('/api/contacts')) {
+  if (url.pathname.startsWith('/api/')) {
     e.respondWith(
       fetch(req)
         .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res; })

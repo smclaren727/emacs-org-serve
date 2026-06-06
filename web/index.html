@@ -6,34 +6,16 @@
 <meta name="theme-color" content="#1f2430">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Contacts">
+<meta name="apple-mobile-web-app-title" content="Vulpea">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="icon" href="icon.svg">
-<title>Contacts</title>
-<style>
-:root{--bg:#1f2430;--panel:#232834;--panel2:#2b313f;--line:#3a4150;--fg:#e6e9ef;--muted:#9aa3b2;--mail:#7cc4ff;--tel:#8bd5a0}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-header{position:sticky;top:0;z-index:10;background:rgba(31,36,48,.92);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;border-bottom:1px solid #00000040}
-#q{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);font-size:17px;outline:none}
-#q:focus{border-color:var(--mail)}
-#count{color:var(--muted);font-size:13px;margin-top:8px}
-main{padding:12px 16px calc(env(safe-area-inset-bottom) + 28px);display:flex;flex-direction:column;gap:10px}
-.card{background:var(--panel);border:1px solid #333a49;border-radius:14px;padding:14px;display:flex;gap:12px}
-.avatar{flex:0 0 44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#3d4760,#5b6b8f);display:flex;align-items:center;justify-content:center;font-weight:600;color:#fff;font-size:15px}
-.body{flex:1;min-width:0}
-.name{font-weight:600;font-size:17px;word-break:break-word}
-.company{color:var(--muted);font-size:13px;margin-top:1px}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
-.chip{display:inline-flex;align-items:baseline;gap:6px;padding:6px 11px;border-radius:999px;background:var(--panel2);text-decoration:none;font-size:14px;border:1px solid var(--line);color:var(--mail)}
-.chip.tel{color:var(--tel)}
-.chip .lbl{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
-.msg{color:var(--muted);text-align:center;padding:48px 16px}
-</style>
+<link rel="stylesheet" href="app.css">
+<title>Contacts · Vulpea</title>
 </head>
 <body>
 <header>
+  <nav class="tabs"><a class="tab active" href="index.html">Contacts</a><a class="tab" href="notes.html">Notes</a></nav>
   <input id="q" type="search" placeholder="Search contacts…" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="search">
   <div id="count"></div>
 </header>
@@ -41,41 +23,15 @@ main{padding:12px 16px calc(env(safe-area-inset-bottom) + 28px);display:flex;fle
 <script>
 const listEl=document.getElementById('list'),qEl=document.getElementById('q'),countEl=document.getElementById('count');
 let all=[];
-const esc=s=>{const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML;};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const telDigits=v=>v.replace(/[^\d+]/g,'');
 const initials=n=>{const p=String(n||'').trim().split(/\s+/);return ((p[0]&&p[0][0]||'')+(p.length>1?p[p.length-1][0]:'')).toUpperCase()||'?';};
-function chips(fields,kind){
-  return (fields||[]).map(f=>{
-    const href=kind==='tel'?'tel:'+telDigits(f.value):'mailto:'+encodeURIComponent(f.value);
-    return `<a class="chip ${kind}" href="${href}"><span class="lbl">${esc(f.label)}</span>${esc(f.value)}</a>`;
-  }).join('');
-}
-function card(c){
-  const hasChips=(c.phones&&c.phones.length)||(c.emails&&c.emails.length);
-  return `<div class="card"><div class="avatar">${esc(initials(c.name))}</div><div class="body">`
-    +`<div class="name">${esc(c.name)}</div>`
-    +(c.company?`<div class="company">${esc(c.company)}</div>`:'')
-    +(hasChips?`<div class="chips">${chips(c.phones,'tel')}${chips(c.emails,'mailto')}</div>`:'')
-    +`</div></div>`;
-}
-function render(items){
-  if(!items.length){listEl.innerHTML='<div class="msg">No matches</div>';countEl.textContent='0 contacts';return;}
-  listEl.innerHTML=items.map(card).join('');
-  countEl.textContent=items.length+(items.length===1?' contact':' contacts');
-}
-function applyFilter(){
-  const q=qEl.value.trim().toLowerCase();
-  if(!q){render(all);return;}
-  const terms=q.split(/\s+/);
-  render(all.filter(c=>{
-    const hay=(c.name+' '+(c.company||'')+' '+(c.emails||[]).map(e=>e.value).join(' ')+' '+(c.phones||[]).map(p=>p.value).join(' ')).toLowerCase();
-    return terms.every(t=>hay.includes(t));
-  }));
-}
+function chips(fields,kind){return (fields||[]).map(f=>{const href=kind==='tel'?'tel:'+telDigits(f.value):'mailto:'+encodeURIComponent(f.value);return `<a class="chip ${kind}" href="${href}"><span class="lbl">${esc(f.label)}</span>${esc(f.value)}</a>`;}).join('');}
+function card(c){const has=(c.phones&&c.phones.length)||(c.emails&&c.emails.length);return `<div class="card"><div class="avatar">${esc(initials(c.name))}</div><div class="cbody"><div class="name">${esc(c.name)}</div>${c.company?`<div class="company">${esc(c.company)}</div>`:''}${has?`<div class="chips">${chips(c.phones,'tel')}${chips(c.emails,'mailto')}</div>`:''}</div></div>`;}
+function render(items){if(!items.length){listEl.innerHTML='<div class="msg">No matches</div>';countEl.textContent='0 contacts';return;}listEl.innerHTML=items.map(card).join('');countEl.textContent=items.length+(items.length===1?' contact':' contacts');}
+function applyFilter(){const q=qEl.value.trim().toLowerCase();if(!q){render(all);return;}const terms=q.split(/\s+/);render(all.filter(c=>{const hay=(c.name+' '+(c.company||'')+' '+(c.emails||[]).map(e=>e.value).join(' ')+' '+(c.phones||[]).map(p=>p.value).join(' ')).toLowerCase();return terms.every(t=>hay.includes(t));}));}
 qEl.addEventListener('input',applyFilter);
-fetch('api/contacts').then(r=>{if(!r.ok)throw new Error(r.status);return r.json();})
-  .then(cs=>{all=cs;render(all);})
-  .catch(()=>{listEl.innerHTML='<div class="msg">Couldn’t load contacts.</div>';});
+fetch('api/contacts').then(r=>{if(!r.ok)throw 0;return r.json();}).then(cs=>{all=cs;render(all);}).catch(()=>{listEl.innerHTML='<div class="msg">Couldn’t load contacts.</div>';});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>

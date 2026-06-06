@@ -1,6 +1,6 @@
 {
-  "name": "Contacts",
-  "short_name": "Contacts",
+  "name": "Vulpea",
+  "short_name": "Vulpea",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
