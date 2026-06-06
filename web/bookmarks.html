@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2430">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vulpea">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="app.css">
+<style>.group-h{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:16px 4px 2px}.group-h:first-child{margin-top:2px}</style>
+<title>Bookmarks · Vulpea</title>
+</head>
+<body>
+<header>
+  <nav class="tabs"><a class="tab" href="index.html">Contacts</a><a class="tab" href="notes.html">Notes</a><a class="tab active" href="bookmarks.html">Bookmarks</a></nav>
+  <input id="q" type="search" placeholder="Search bookmarks…" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="search">
+  <div id="count"></div>
+</header>
+<main id="list"><div class="msg">Loading…</div></main>
+<script>
+const listEl=document.getElementById('list'),qEl=document.getElementById('q'),countEl=document.getElementById('count');
+let all=[];
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function item(b){
+  const tags=(b.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
+  return `<a class="note-item" href="${esc(b.url)}" target="_blank" rel="noopener">`
+    +`<div class="note-title">${esc(b.title)}</div>`
+    +`<div class="note-loc">${esc(b.url)}</div>`
+    +(tags?`<div class="note-tags">${tags}</div>`:'')+`</a>`;
+}
+function render(items){
+  if(!items.length){listEl.innerHTML='<div class="msg">No matches</div>';countEl.textContent='0 bookmarks';return;}
+  const groups=new Map();
+  for(const b of items){const k=b.category||'Uncategorized';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(b);}
+  let html='';
+  for(const [cat,arr] of groups){html+=`<div class="group-h">${esc(cat)}</div>`+arr.map(item).join('');}
+  listEl.innerHTML=html;
+  countEl.textContent=items.length+(items.length===1?' bookmark':' bookmarks');
+}
+function applyFilter(){
+  const q=qEl.value.trim().toLowerCase();
+  if(!q){render(all);return;}
+  const terms=q.split(/\s+/);
+  render(all.filter(b=>{
+    const hay=(b.title+' '+b.url+' '+b.category+' '+(b.tags||[]).join(' ')).toLowerCase();
+    return terms.every(t=>hay.includes(t));
+  }));
+}
+qEl.addEventListener('input',applyFilter);
+fetch('api/bookmarks').then(r=>{if(!r.ok)throw 0;return r.json();})
+  .then(bs=>{all=bs;render(all);})
+  .catch(()=>{listEl.innerHTML='<div class="msg">Couldn’t load bookmarks.</div>';});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>

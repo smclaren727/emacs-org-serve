@@ -352,6 +352,96 @@ FROM notes WHERE id = ?`, enc(id)).Scan(&title, &level, &pos, &path, &outline, &
 }
 
 // ---------------------------------------------------------------------------
+// Bookmarks (parsed from bookmarks.org — not a vulpea note, so read from file)
+// ---------------------------------------------------------------------------
+
+// Bookmark is one [[url][title]] headline under a category path.
+type Bookmark struct {
+	URL      string   `json:"url"`
+	Title    string   `json:"title"`
+	Category string   `json:"category"`
+	Tags     []string `json:"tags"`
+	Created  string   `json:"created,omitempty"`
+}
+
+func bookmarksFile() string {
+	return env("BOOKMARKS_FILE", filepath.Join(vaultDir(), "50-Resources", "bookmarks.org"))
+}
+
+var bmHead = regexp.MustCompile(`^(\*+)\s+(.*)$`)
+var bmLink = regexp.MustCompile(`\[\[([^\]]+)\](?:\[([^\]]*)\])?\]`)
+
+func bookmarks() ([]Bookmark, error) {
+	f := bookmarksFile()
+	if !withinVault(f) {
+		return nil, fmt.Errorf("bookmarks file outside vault: %s", f)
+	}
+	data, err := os.ReadFile(f)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []Bookmark{}, nil
+		}
+		return nil, err
+	}
+	lines := strings.Split(string(data), "\n")
+
+	type cat struct {
+		level int
+		name  string
+	}
+	var stack []cat
+	out := []Bookmark{}
+	for i, line := range lines {
+		m := bmHead.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		level, title := len(m[1]), strings.TrimSpace(m[2])
+		for len(stack) > 0 && stack[len(stack)-1].level >= level {
+			stack = stack[:len(stack)-1] // pop siblings/deeper
+		}
+		lk := bmLink.FindStringSubmatch(title)
+		if lk == nil || !strings.HasPrefix(title, "[[") { // plain heading = category
+			stack = append(stack, cat{level, title})
+			continue
+		}
+		desc := strings.TrimSpace(lk[2])
+		if desc == "" {
+			desc = strings.TrimSpace(lk[1])
+		}
+		names := make([]string, len(stack))
+		for j, c := range stack {
+			names[j] = c.name
+		}
+		bm := Bookmark{URL: strings.TrimSpace(lk[1]), Title: desc, Category: strings.Join(names, " › "), Tags: []string{}}
+		for j := i + 1; j < len(lines); j++ { // adjacent PROPERTIES drawer
+			ls := strings.TrimSpace(lines[j])
+			switch {
+			case ls == ":PROPERTIES:" || ls == "":
+				continue
+			case ls == ":END:":
+				j = len(lines)
+			case strings.HasPrefix(ls, ":CREATED:"):
+				bm.Created = strings.Trim(strings.TrimSpace(strings.TrimPrefix(ls, ":CREATED:")), "[]")
+			case strings.HasPrefix(ls, ":TAGS:"):
+				for _, t := range strings.Split(strings.TrimPrefix(ls, ":TAGS:"), ",") {
+					if t = strings.TrimSpace(t); t != "" {
+						bm.Tags = append(bm.Tags, t)
+					}
+				}
+			default:
+				j = len(lines) // left the drawer
+			}
+			if j >= len(lines) {
+				break
+			}
+		}
+		out = append(out, bm)
+	}
+	return out, nil
+}
+
+// ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
 
@@ -402,6 +492,16 @@ func handleNote(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, nd)
 }
 
+func handleBookmarks(w http.ResponseWriter, r *http.Request) {
+	bs, err := bookmarks()
+	if err != nil {
+		log.Printf("bookmarks: %v", err)
+		http.Error(w, "read failed", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, bs)
+}
+
 func main() {
 	var err error
 	dsn := "file:" + dbPath() + "?mode=ro&_pragma=busy_timeout(5000)"
@@ -423,6 +523,7 @@ func main() {
 	mux.HandleFunc("/api/contacts", handleContacts)
 	mux.HandleFunc("/api/notes", handleNotes)
 	mux.HandleFunc("/api/note", handleNote)
+	mux.HandleFunc("/api/bookmarks", handleBookmarks)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
