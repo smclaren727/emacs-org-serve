@@ -29,9 +29,9 @@ See the diagram in `AGENTS.md`. Key properties:
   read-only even if Emacs is down.
 - **Writes** are forwarded to Emacs (`emacsclient --eval` → whitelisted
   command) so Org structure and metadata stay correct; the DB re-syncs after.
-- The vault reaches the node via **Syncthing** (bidirectional, currently
-  disabled — re-enable for Phase 2). The node's Emacs daemon indexes it into a
-  local `vulpea.db`.
+- The vault reaches the node via **Syncthing** (bidirectional, **active** since
+  2026-06-06: Mac ↔ `loxley:/srv/loxley/All-The-Things` over Tailscale). The
+  node's Emacs daemon indexes it into a local `vulpea.db`.
 - For development, run against the Mac dev DB:
   `~/.emacs.d/var/vulpea/vulpea.db` (set `VULPEA_DB`).
 
@@ -221,6 +221,14 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 
 ## NixOS deploy (sketch for M3)
 
+> Deploy target: the **`nix-loxley-node`** flake (`/Users/seanmclaren/Developer/nix-loxley-node`),
+> synced to the node at `/srv/loxley/nixos` and applied with
+> `nixos-rebuild switch --flake path:/srv/loxley/nixos#loxley` (snapper-snapshot
+> `root` + `srv-loxley` first). Run as the **`loxley`** user (home `/srv/loxley`);
+> model on the existing `read-later-ingress.nix`. The sketch below predates node
+> specifics — use `after = [ "loxley-emacs.service" ]`, drop `DynamicUser`, and
+> point `VULPEA_DB` under `/srv/loxley`.
+
 ```nix
 # package
 vulpea-serve = pkgs.buildGoModule {
@@ -243,7 +251,10 @@ systemd.services.vulpea-serve = {
 
 ## Dependencies / open items
 
-- **Syncthing** to the node is currently disabled — re-enable for Phase 2.
+- **Syncthing** to the node is **active** (Mac ↔ `loxley:/srv/loxley/All-The-Things`,
+  bidirectional over Tailscale). Devices/folders are managed at runtime via the
+  Syncthing REST API — the `nix-loxley-node` config sets `overrideDevices/Folders
+  = false` by design, so the pairing persists across rebuilds.
 - The node's Emacs must run **vulpea** (installed via Nix, since
   `use-package-always-ensure` is off on that host) and index the synced vault.
 - Decide the node's `vulpea.db` path + the Emacs daemon **socket name** for the
