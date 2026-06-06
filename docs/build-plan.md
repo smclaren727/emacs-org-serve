@@ -77,14 +77,14 @@ WHERE t.tag = '"contact"' AND p.key = '"EMAIL_WORK"';
 
 Uses data that exists today (167 contact notes; the `meta` table is empty).
 
-- [ ] `go.mod` + `main.go`: open `vulpea.db` read-only; `enc`/`dec` shim.
-- [ ] `GET /api/contacts` → JSON: for each note tagged `contact`, return name
+- [x] `go.mod` + `main.go`: open `vulpea.db` read-only; `enc`/`dec` shim.
+- [x] `GET /api/contacts` → JSON: for each note tagged `contact`, return name
       (`notes.title`) + emails/phones (from `properties`, keys `EMAIL*` /
       `PHONE*`). Decode all values.
-- [ ] `web/`: a one-page PWA that fetches `/api/contacts`, renders searchable
+- [x] `web/`: a one-page PWA that fetches `/api/contacts`, renders searchable
       cards (tap to call/email), with `manifest.json` (`display: standalone`)
       and a minimal `sw.js` for offline cache.
-- [ ] Run locally (`VULPEA_DB=…/vulpea.db go run .`), open in a browser,
+- [x] Run locally (`VULPEA_DB=…/vulpea.db go run .`), open in a browser,
       verify against `sqlite3` counts.
 
 ### M2 — Write-bridge
