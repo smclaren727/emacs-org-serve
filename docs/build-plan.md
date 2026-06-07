@@ -1,8 +1,8 @@
-# vulpea-serve — Build Plan
+# emacs-org-serve — Build Plan
 
 Status: active working doc. Created 2026-06-05.
 
-Self-contained plan for building `vulpea-serve`. Pairs with `AGENTS.md` (the
+Self-contained plan for building `emacs-org-serve`. Pairs with `AGENTS.md` (the
 must-know facts and rules). Read `AGENTS.md` first.
 
 ## Goal
@@ -29,9 +29,8 @@ See the diagram in `AGENTS.md`. Key properties:
   read-only even if Emacs is down.
 - **Writes** are forwarded to Emacs (`emacsclient --eval` → whitelisted
   command) so Org structure and metadata stay correct; the DB re-syncs after.
-- The vault reaches the node via **Syncthing** (bidirectional, **active** since
-  2026-06-06: Mac ↔ `loxley:/srv/loxley/All-The-Things` over Tailscale). The
-  node's Emacs daemon indexes it into a local `vulpea.db`.
+- The vault reaches the node via **Syncthing** (bidirectional, over Tailscale).
+  The node's Emacs daemon indexes it into a local `vulpea.db`.
 - For development, run against the Mac dev DB:
   `~/.emacs.d/var/vulpea/vulpea.db` (set `VULPEA_DB`).
 
@@ -115,7 +114,7 @@ adoption: reading items tagged with `status :: queued`, queried from the
 
 ```go
 // go.mod
-module vulpea-serve
+module emacs-org-serve
 
 go 1.23
 
@@ -196,7 +195,7 @@ func main() {
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
 	addr := env("LISTEN", "127.0.0.1:8765")
-	log.Printf("vulpea-serve on %s (db=%s)", addr, dbPath())
+	log.Printf("emacs-org-serve on %s (db=%s)", addr, dbPath())
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 ```
@@ -221,40 +220,37 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 
 ## NixOS deploy (sketch for M3)
 
-> Deploy target: the **`nix-loxley-node`** flake (`/Users/seanmclaren/Developer/nix-loxley-node`),
-> synced to the node at `/srv/loxley/nixos` and applied with
-> `nixos-rebuild switch --flake path:/srv/loxley/nixos#loxley` (snapper-snapshot
-> `root` + `srv-loxley` first). Run as the **`loxley`** user (home `/srv/loxley`);
-> model on the existing `read-later-ingress.nix`. The sketch below predates node
-> specifics — use `after = [ "loxley-emacs.service" ]`, drop `DynamicUser`, and
-> point `VULPEA_DB` under `/srv/loxley`.
+> Deploy as a NixOS module on an always-on node: build with `buildGoModule`,
+> run as a dedicated service user, `after` the Emacs daemon, and bind to
+> localhost (Tailscale `serve` fronts it with HTTPS, tailnet-only). Snapshot
+> before switching. Point `VULPEA_DB` at the node's `vulpea.db` and `VAULT_DIR`
+> at the synced vault.
 
 ```nix
 # package
-vulpea-serve = pkgs.buildGoModule {
-  pname = "vulpea-serve"; version = "0.1.0";
+emacs-org-serve = pkgs.buildGoModule {
+  pname = "emacs-org-serve"; version = "0.1.0";
   src = ./.; vendorHash = null; # set after `go mod tidy`
 };
 
 # service
-systemd.services.vulpea-serve = {
-  description = "vulpea-serve PWA backend";
+systemd.services.emacs-org-serve = {
+  description = "emacs-org-serve PWA backend";
   after = [ "emacs.service" ]; wantedBy = [ "multi-user.target" ];
   environment = {
     VULPEA_DB = "/path/on/node/vulpea.db";
     EMACS_SOCKET = "server";
     LISTEN = "127.0.0.1:8765";   # Tailscale fronts it; do not expose publicly
   };
-  serviceConfig = { ExecStart = "${vulpea-serve}/bin/vulpea-serve"; Restart = "on-failure"; DynamicUser = true; };
+  serviceConfig = { ExecStart = "${emacs-org-serve}/bin/emacs-org-serve"; Restart = "on-failure"; DynamicUser = true; };
 };
 ```
 
 ## Dependencies / open items
 
-- **Syncthing** to the node is **active** (Mac ↔ `loxley:/srv/loxley/All-The-Things`,
-  bidirectional over Tailscale). Devices/folders are managed at runtime via the
-  Syncthing REST API — the `nix-loxley-node` config sets `overrideDevices/Folders
-  = false` by design, so the pairing persists across rebuilds.
+- **Syncthing** to the node is active (bidirectional over Tailscale). Devices/
+  folders are managed at runtime via the Syncthing REST API (the NixOS config
+  sets `overrideDevices/Folders = false`), so the pairing persists across rebuilds.
 - The node's Emacs must run **vulpea** (installed via Nix, since
   `use-package-always-ensure` is off on that host) and index the synced vault.
 - Decide the node's `vulpea.db` path + the Emacs daemon **socket name** for the

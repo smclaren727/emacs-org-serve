@@ -1,5 +1,5 @@
 # Binaries
-/vulpea-serve
+/emacs-org-serve
 *.exe
 *.test
 *.out

@@ -1,4 +1,4 @@
-# vulpea-serve
+# emacs-org-serve
 
 A small, single-binary **Go** service that exposes a personal Org-mode notes
 vault to **iPhone PWAs** (Add-to-Home-Screen mini apps), by reading the
@@ -11,7 +11,7 @@ builds from the vault.
 ## The idea in one paragraph
 
 Org files in `~/All-The-Things/` are the source of truth. Emacs (vulpea) indexes
-them into `vulpea.db`. `vulpea-serve` reads that DB **read-only** and serves JSON
+them into `vulpea.db`. `emacs-org-serve` reads that DB **read-only** and serves JSON
 + an embedded PWA; **writes go back through Emacs** via `emacsclient` calling
 whitelisted commands. The phone reaches it over **Tailscale**. One static binary,
 deployed on a NixOS node with systemd. See `AGENTS.md` for the architecture
@@ -37,7 +37,7 @@ go run .                      # serves http://127.0.0.1:8765
 ## Layout (target)
 
 ```
-vulpea-serve/
+emacs-org-serve/
 ├── AGENTS.md            # agent orientation — read first
 ├── CLAUDE.md            # @AGENTS.md pointer
 ├── README.md

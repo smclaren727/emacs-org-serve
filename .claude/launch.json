@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "vulpea-serve",
+      "name": "emacs-org-serve",
       "runtimeExecutable": "go",
       "runtimeArgs": ["run", "."],
       "port": 8765

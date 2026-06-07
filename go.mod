@@ -1,4 +1,4 @@
-module vulpea-serve
+module github.com/smclaren727/emacs-org-serve
 
 go 1.25.0
 

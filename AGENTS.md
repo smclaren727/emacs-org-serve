@@ -1,4 +1,4 @@
-# AGENTS.md — vulpea-serve
+# AGENTS.md — emacs-org-serve
 
 Context for coding agents. Read this first; then `docs/build-plan.md` for the
 detailed plan and skeleton. This file is the source of truth for the
@@ -6,7 +6,7 @@ must-know facts and rules.
 
 ## What this is
 
-`vulpea-serve` is a small, single-binary **Go** HTTP service that exposes a
+`emacs-org-serve` is a small, single-binary **Go** HTTP service that exposes a
 personal Org-mode notes vault to **iPhone PWAs** (Add-to-Home-Screen mini
 apps). It is **Phase 2** of a larger project; Phase 1 (the Emacs side) is
 already done.
@@ -15,7 +15,7 @@ already done.
   the **source of truth**.
 - An Emacs package called **vulpea** (v2, its own SQLite DB) indexes those
   files into **`vulpea.db`** (SQLite). That database is this service's input.
-- `vulpea-serve` **reads `vulpea.db` directly** (read-only) and serves JSON +
+- `emacs-org-serve` **reads `vulpea.db` directly** (read-only) and serves JSON +
   an embedded PWA. **Writes go back through Emacs** (see Safety rules).
 
 ## Architecture
@@ -25,7 +25,7 @@ already done.
       │  HTTPS over Tailscale (or SSH tunnel); service binds localhost/tailnet only
       ▼
  ┌──────────────────────── nix-node (NixOS, always-on) ────────────────────────┐
- │  vulpea-serve (this repo)                                                    │
+ │  emacs-org-serve (this repo)                                                    │
  │     ├── READ  ──►  vulpea.db (SQLite, read-only)      ← fast, Emacs-independent│
  │     └── WRITE ──►  emacsclient --eval "(whitelisted-cmd …)"                   │
  │                         │                                                     │
@@ -36,8 +36,8 @@ already done.
 ```
 
 - The node's Emacs daemon indexes the Syncthing-synced vault → a **local**
-  `vulpea.db` that `vulpea-serve` reads.
-- Writes from a PWA → `vulpea-serve` → `emacsclient` → node Emacs edits the Org
+  `vulpea.db` that `emacs-org-serve` reads.
+- Writes from a PWA → `emacs-org-serve` → `emacsclient` → node Emacs edits the Org
   file → vulpea re-indexes → Syncthing propagates the change back to the Mac.
 - **Dev mode (before the node exists):** run against the Mac's dev DB at
   `~/.emacs.d/var/vulpea/vulpea.db` and a local Emacs daemon for the bridge.

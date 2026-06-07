@@ -1,4 +1,4 @@
-// vulpea-serve is a single-binary HTTP service that exposes a personal Org-mode
+// emacs-org-serve is a single-binary HTTP service that exposes a personal Org-mode
 // notes vault (indexed by Emacs/vulpea into vulpea.db) to iPhone PWAs.
 //
 // It opens vulpea.db READ-ONLY and serves JSON + an embedded PWA. Note bodies
@@ -528,6 +528,6 @@ func main() {
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
 	addr := env("LISTEN", "127.0.0.1:8765")
-	log.Printf("vulpea-serve on http://%s  (db=%s, vault=%s, read-only)", addr, dbPath(), vaultDir())
+	log.Printf("emacs-org-serve on http://%s  (db=%s, vault=%s, read-only)", addr, dbPath(), vaultDir())
 	log.Fatal(http.ListenAndServe(addr, mux))
 }

@@ -1,8 +1,8 @@
-# vulpea-serve — PWA app catalog
+# emacs-org-serve — PWA app catalog
 
 Status: active working doc. Created 2026-06-06. Pairs with `build-plan.md`.
 
-The mini-apps `vulpea-serve` exposes to the iPhone, grounded in the **live**
+The mini-apps `emacs-org-serve` exposes to the iPhone, grounded in the **live**
 vault/DB (numbers as of 2026-06-06). Reads are the current focus; writes are
 deferred and discussed at the end.
 
@@ -54,8 +54,9 @@ data suggests it's *mixed*:
   elisp does the real Org edit; vulpea re-indexes; Syncthing propagates. Daemon
   is up (socket `server`, `org-directory ~/All-The-Things`, `vulpea` +
   `org-capture` loaded).
-- **Reading List → already has a service-level writer**: the node's
-  `loxley-read-later-ingress` systemd service (TCP `45741`, sops bearer token).
+- **Reading List → already has a service-level writer**: a read-later ingress
+  service on the node (an authenticated HTTP endpoint that drops items into the
+  vault).
 - **Bookmarks → Emacs** (append to `bookmarks.org`) or a small writer.
 
 Safety rule (unchanged): never write the DB or `.org` files directly from Go;
