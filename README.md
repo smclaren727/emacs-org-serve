@@ -5,10 +5,6 @@ vault to **iPhone PWAs** (Add-to-Home-Screen mini apps), by reading the
 **SQLite database** that the Emacs package [vulpea](https://github.com/d12frosted/vulpea)
 builds from the vault.
 
-> **Status:** built and running. The Contacts, Notes, and Bookmarks read apps
-> work, served from `vulpea.db` and deployed on a NixOS node behind Tailscale.
-> Start with `AGENTS.md`; `docs/build-plan.md` has the plan it grew from.
-
 ## The idea in one paragraph
 
 Org files in `~/All-The-Things/` are the source of truth. Emacs (vulpea) indexes
