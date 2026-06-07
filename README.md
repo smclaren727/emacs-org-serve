@@ -5,8 +5,9 @@ vault to **iPhone PWAs** (Add-to-Home-Screen mini apps), by reading the
 **SQLite database** that the Emacs package [vulpea](https://github.com/d12frosted/vulpea)
 builds from the vault.
 
-> **Status:** planning / not yet built. This repo currently holds the plan.
-> A coding session builds from `docs/build-plan.md`. Start with `AGENTS.md`.
+> **Status:** built and running. The Contacts, Notes, and Bookmarks read apps
+> work, served from `vulpea.db` and deployed on a NixOS node behind Tailscale.
+> Start with `AGENTS.md`; `docs/build-plan.md` has the plan it grew from.
 
 ## The idea in one paragraph
 
@@ -25,7 +26,7 @@ binary; boring long-run reliability and a tiny footprint for an always-on
 home service. The hard, dynamic work lives in Emacs, so the service stays a
 thin, stable read-layer — Go's sweet spot.
 
-## Quickstart (once built)
+## Quickstart
 
 ```sh
 # Dev: run against the Mac's vulpea database
@@ -34,7 +35,7 @@ go run .                      # serves http://127.0.0.1:8765
 # open the PWA in a browser; the first slice is a contacts lookup
 ```
 
-## Layout (target)
+## Layout
 
 ```
 emacs-org-serve/
