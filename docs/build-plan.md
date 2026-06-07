@@ -110,6 +110,38 @@ Bookmarks, today/journal, and the **reading queue** (needs `vulpea-meta`
 adoption: reading items tagged with `status :: queued`, queried from the
 `meta` table).
 
+## Emacs write-bridge reference (for M2)
+
+When M2 wires writes, the Go side stays dumb: it shells out to
+`emacsclient -s <socket> --eval "(<cmd> "arg" …)"` with **quoted** args and
+calls only **named, whitelisted** commands — never raw eval. The Org edit
+happens in elisp; vulpea re-indexes; Syncthing propagates. Define thin elisp
+wrappers on the Emacs side for this fixed vocabulary:
+
+| Need | vulpea / Emacs command |
+|---|---|
+| Create a note programmatically | `vulpea-create` |
+| Set typed key/value metadata | `vulpea-meta-set`, `vulpea-buffer-meta-set` |
+| Add / replace / remove an alias (`ALIASES`) | `vulpea-buffer-alias-add` / `-set` / `-remove` |
+| Quick capture | an `org-capture` wrapper (mirror the `org-protocol` pattern) |
+
+The reads the service needs come straight from SQLite (see Schema), so the
+vulpea **query** API (`vulpea-find`, `vulpea-db-query-by-*`, `vulpea-meta-get`)
+is never called from Go — listed here only as the Emacs-side counterpart.
+
+**Why `vulpea-meta` gates the reading queue.** vulpea-meta is structured,
+typed, **queryable** key/value metadata — stored as an Org description list,
+indexed into the `meta` table, with a typed query API
+(`vulpea-db-query-by-meta` / `-by-meta-key`). The flagship reading-queue slice
+(`status :: queued`, …) depends on the capture workflow adopting it; the `meta`
+table is empty today (see AGENTS.md "Data reality"). This queryable-metadata
+capability is the reason the notes engine moved to vulpea in the first place.
+
+### Sources
+- vulpea (v2, own SQLite DB): https://github.com/d12frosted/vulpea
+- "Vulpea v2: breaking up with org-roam": https://www.d12frosted.io/posts/2025-11-28-vulpea-v2-breaking-up-with-org-roam
+- vulpea-ui: https://github.com/d12frosted/vulpea-ui · vulpea-journal: https://github.com/d12frosted/vulpea-journal
+
 ## Skeleton (starting point — flesh out in M1)
 
 ```go
