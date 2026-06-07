@@ -352,6 +352,57 @@ FROM notes WHERE id = ?`, enc(id)).Scan(&title, &level, &pos, &path, &outline, &
 }
 
 // ---------------------------------------------------------------------------
+// Journal (daily vulpea notes tagged `journal`; newest first, bodies inline)
+// ---------------------------------------------------------------------------
+
+// JournalEntry is one daily note: its date, display title, and Org body. Unlike
+// the notes browser (list + lazy detail), the journal returns bodies inline —
+// entries are short and read as a reverse-chronological feed.
+type JournalEntry struct {
+	ID    string `json:"id"`
+	Date  string `json:"date"`  // YYYY-MM-DD, from the filename
+	Title string `json:"title"` // e.g. "2026-06-05 Friday"
+	Body  string `json:"body"`  // raw Org source; the client renders it
+}
+
+func journal() ([]JournalEntry, error) {
+	rows, err := db.Query(`
+SELECT n.id, n.title, n.level, n.pos, n.path
+FROM notes n JOIN tags t ON t.note_id = n.id
+WHERE t.tag = ?
+ORDER BY n.path DESC`, enc("journal"))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []JournalEntry{}
+	for rows.Next() {
+		var rawID, title, path string
+		var level, pos int
+		if err := rows.Scan(&rawID, &title, &level, &pos, &path); err != nil {
+			return nil, err
+		}
+		p := dec(path)
+		if !withinVault(p) {
+			continue // defense-in-depth; the path comes from the DB
+		}
+		body, err := readBody(p, level, pos)
+		if err != nil {
+			log.Printf("journal body %s: %v", p, err)
+			body = ""
+		}
+		out = append(out, JournalEntry{
+			ID:    dec(rawID),
+			Date:  strings.TrimSuffix(filepath.Base(p), ".org"),
+			Title: dec(title),
+			Body:  body,
+		})
+	}
+	return out, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
 // Bookmarks (parsed from bookmarks.org — not a vulpea note, so read from file)
 // ---------------------------------------------------------------------------
 
@@ -492,6 +543,16 @@ func handleNote(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, nd)
 }
 
+func handleJournal(w http.ResponseWriter, r *http.Request) {
+	es, err := journal()
+	if err != nil {
+		log.Printf("journal query: %v", err)
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, es)
+}
+
 func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 	bs, err := bookmarks()
 	if err != nil {
@@ -523,6 +584,7 @@ func main() {
 	mux.HandleFunc("/api/contacts", handleContacts)
 	mux.HandleFunc("/api/notes", handleNotes)
 	mux.HandleFunc("/api/note", handleNote)
+	mux.HandleFunc("/api/journal", handleJournal)
 	mux.HandleFunc("/api/bookmarks", handleBookmarks)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 	mux.Handle("/", http.FileServer(http.FS(sub)))

@@ -26,7 +26,7 @@ Apps read from two places — keep this distinction in mind when adding one:
 | **Tasks** | open TODOs by project/area | DB (`todo`) | 95 (≈no dates) | ▢ planned |
 | **Reading List** | saved articles (title/URL/date) → read or open | files (`Read-Later/items/` + `logs/index.jsonl`) | 29 | ▢ planned (flagship) |
 | **Today / Agenda** | scheduled / due today | DB (`scheduled`/`deadline`) | ~none (1 / 4) | ⛔ deferred — needs a scheduling habit |
-| **Journal** | daily entries | DB / files | 3 | ➖ fold into Today/Notes |
+| **Journal** | daily entries, newest first, bodies inline | DB (tag `journal`) + file body | 3 | ✅ built |
 
 Notes on the deferred ones:
 - **Tasks** is a *grouped task list*, not a calendar — there's almost no
@@ -40,9 +40,11 @@ Notes on the deferred ones:
 - `GET /api/contacts`
 - `GET /api/notes` · `GET /api/note?id=<id>`
 - `GET /api/bookmarks`
+- `GET /api/journal`
 - *(planned)* `GET /api/tasks` · `GET /api/reading`
 
-UI: one PWA, tabbed (Contacts / Notes / Bookmarks …), shared `web/app.css`.
+UI: one PWA, tabbed (Contacts / Notes / Bookmarks / Journal), shared `web/app.css`
+plus `web/org.js` (the read-only Org→HTML renderer shared by Notes and Journal).
 
 ## Writes (deferred — decide per app)
 
