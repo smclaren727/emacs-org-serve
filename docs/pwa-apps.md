@@ -23,14 +23,16 @@ Apps read from two places — keep this distinction in mind when adding one:
 | **Contacts** | 169 people; tap to call/email | DB props (`EMAIL*`/`PHONE*`/`COMPANY`) | rich | ✅ built |
 | **Notes** | all 285 notes/headlines + body | DB + file slice | full | ✅ built |
 | **Bookmarks** | 65 links grouped by category | file parse (`bookmarks.org`) | 65 | ✅ built |
-| **Tasks** | open TODOs by project/area | DB (`todo`) | 95 (≈no dates) | ▢ planned |
+| **Tasks** | open TODOs grouped by area/project, with parent-heading context + due dates | DB (`todo`) | 95 (≈no dates) | ✅ built |
 | **Reading List** | saved articles (title/URL/date) → read or open | files (`Read-Later/items/` + `logs/index.jsonl`) | 29 | ▢ planned (flagship) |
 | **Today / Agenda** | scheduled / due today | DB (`scheduled`/`deadline`) | ~none (1 / 4) | ⛔ deferred — needs a scheduling habit |
 | **Journal** | daily entries, newest first, bodies inline | DB (tag `journal`) + file body | 3 | ✅ built |
 
-Notes on the deferred ones:
-- **Tasks** is a *grouped task list*, not a calendar — there's almost no
-  scheduled/deadline data yet, so an agenda-by-date would be empty.
+Notes on Tasks & the deferred one:
+- **Tasks** ships as a *grouped task list*, not a calendar — there's almost no
+  scheduled/deadline data yet, so an agenda-by-date would be empty. It groups by
+  file (`file_title`) in PARA order, surfaces the parent heading as context, and
+  shows the few real due dates as badges.
 - **Reading List** items are real and well-structured (`:URL:`, `:title:`,
   date, plus a JSONL index) but **not indexed in `vulpea.db`** — it needs the
   file-based read path, or `vulpea-meta` adoption later.
@@ -41,9 +43,10 @@ Notes on the deferred ones:
 - `GET /api/notes` · `GET /api/note?id=<id>`
 - `GET /api/bookmarks`
 - `GET /api/journal`
-- *(planned)* `GET /api/tasks` · `GET /api/reading`
+- `GET /api/tasks`
+- *(planned)* `GET /api/reading`
 
-UI: one PWA, tabbed (Contacts / Notes / Bookmarks / Journal), shared `web/app.css`
+UI: one PWA, tabbed (Contacts / Notes / Bookmarks / Journal / Tasks), shared `web/app.css`
 plus `web/org.js` (the read-only Org→HTML renderer shared by Notes and Journal).
 
 ## Writes (deferred — decide per app)

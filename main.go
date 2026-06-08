@@ -403,6 +403,108 @@ ORDER BY n.path DESC`, enc("journal"))
 }
 
 // ---------------------------------------------------------------------------
+// Tasks (open TODO headlines, grouped by file; the vault has ~no dates, so this
+// is a grouped list, not an agenda)
+// ---------------------------------------------------------------------------
+
+// Task is one open TODO headline, with enough context to group and place it.
+type Task struct {
+	ID        string   `json:"id"`
+	Title     string   `json:"title"`
+	Todo      string   `json:"todo"`                // e.g. "TODO"
+	Group     string   `json:"group"`               // containing file's title, e.g. "Household"
+	Area      string   `json:"area"`                // PARA bucket from the folder, e.g. "Areas"
+	Context   string   `json:"context,omitempty"`   // nearest parent headline (nested tasks)
+	Tags      []string `json:"tags"`                // context tags (batch/core/…)
+	Scheduled string   `json:"scheduled,omitempty"` // YYYY-MM-DD
+	Deadline  string   `json:"deadline,omitempty"`  // YYYY-MM-DD
+	File      string   `json:"file"`
+}
+
+var orgDateRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
+
+// orgDate pulls the YYYY-MM-DD out of an Org timestamp like
+// "<2026-12-15 Tue ++1y -1w>". Empty if absent or NULL/nil.
+func orgDate(ns sql.NullString) string {
+	if !ns.Valid {
+		return ""
+	}
+	return orgDateRe.FindString(ns.String)
+}
+
+// paraArea derives the PARA bucket from a vault-relative path: the top folder
+// with its NN- ordering prefix stripped ("20-Areas" -> "Areas").
+func paraArea(rel string) string {
+	seg := rel
+	if i := strings.IndexByte(seg, '/'); i >= 0 {
+		seg = seg[:i]
+	}
+	seg = strings.TrimLeft(seg, "0123456789-")
+	return titleCase(strings.ReplaceAll(seg, "-", " "))
+}
+
+func tasks() ([]Task, error) {
+	// Open todos = any non-nil todo that isn't a "done" state. Order by path then
+	// pos so groups cluster in PARA order and tasks keep document order.
+	rows, err := db.Query(`
+SELECT n.id, n.title, n.todo, n.file_title, n.path, n.outline_path, n.scheduled, n.deadline
+FROM notes n
+WHERE n.todo IS NOT NULL AND n.todo <> 'nil'
+  AND n.todo NOT IN ('"DONE"', '"CANCELLED"', '"CANCELED"')
+ORDER BY n.path, n.pos`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Task
+	idx := map[string]int{} // raw (encoded) id -> index in list
+	for rows.Next() {
+		var rawID, title, todo, path string
+		var fileTitle, outline, sched, dead sql.NullString
+		if err := rows.Scan(&rawID, &title, &todo, &fileTitle, &path, &outline, &sched, &dead); err != nil {
+			return nil, err
+		}
+		p := dec(path)
+		rel := relPath(p)
+		grp := decN(fileTitle)
+		if grp == "" {
+			grp = strings.TrimSuffix(filepath.Base(p), ".org")
+		}
+		var ctx string
+		if o := parseOutline(nsRaw(outline)); len(o) > 0 {
+			ctx = o[len(o)-1] // nearest parent headline
+		}
+		idx[rawID] = len(list)
+		list = append(list, Task{
+			ID: dec(rawID), Title: dec(title), Todo: dec(todo),
+			Group: grp, Area: paraArea(rel), Context: ctx,
+			Tags: []string{}, Scheduled: orgDate(sched), Deadline: orgDate(dead),
+			File: rel,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	tagRows, err := db.Query(`SELECT note_id, tag FROM tags`)
+	if err != nil {
+		return nil, err
+	}
+	defer tagRows.Close()
+	for tagRows.Next() {
+		var rawID, tag string
+		if err := tagRows.Scan(&rawID, &tag); err != nil {
+			return nil, err
+		}
+		if i, ok := idx[rawID]; ok {
+			list[i].Tags = append(list[i].Tags, dec(tag))
+		}
+	}
+	return list, tagRows.Err()
+}
+
+// ---------------------------------------------------------------------------
 // Bookmarks (parsed from bookmarks.org — not a vulpea note, so read from file)
 // ---------------------------------------------------------------------------
 
@@ -553,6 +655,16 @@ func handleJournal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, es)
 }
 
+func handleTasks(w http.ResponseWriter, r *http.Request) {
+	ts, err := tasks()
+	if err != nil {
+		log.Printf("tasks query: %v", err)
+		http.Error(w, "query failed", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, ts)
+}
+
 func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 	bs, err := bookmarks()
 	if err != nil {
@@ -585,6 +697,7 @@ func main() {
 	mux.HandleFunc("/api/notes", handleNotes)
 	mux.HandleFunc("/api/note", handleNote)
 	mux.HandleFunc("/api/journal", handleJournal)
+	mux.HandleFunc("/api/tasks", handleTasks)
 	mux.HandleFunc("/api/bookmarks", handleBookmarks)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 	mux.Handle("/", http.FileServer(http.FS(sub)))

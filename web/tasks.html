@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2430">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vulpea">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="app.css">
+<style>.group-h{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin:18px 4px 2px}.group-h:first-child{margin-top:2px}.group-h .area{opacity:.55}.task{background:var(--panel);border:1px solid #333a49;border-radius:14px;padding:12px 14px;display:flex;gap:10px}.tmark{color:var(--accent);font-size:17px;line-height:1.4;flex:0 0 auto}.tbody{flex:1;min-width:0}.ttitle{font-weight:600;font-size:16px;word-break:break-word}.tctx{color:var(--muted);font-size:12px;margin-top:2px}.tmeta{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;align-items:center}.due{font-size:11px;font-weight:700;border-radius:5px;padding:1px 7px;background:#4b3b2a;color:#ffcf9e;white-space:nowrap}.due.past{background:#5a2b2b;color:#ff9b9b}</style>
+<title>Tasks · Vulpea</title>
+</head>
+<body>
+<header>
+  <nav class="tabs"><a class="tab" href="index.html">Contacts</a><a class="tab" href="notes.html">Notes</a><a class="tab" href="bookmarks.html">Bookmarks</a><a class="tab" href="journal.html">Journal</a><a class="tab active" href="tasks.html">Tasks</a></nav>
+  <input id="q" type="search" placeholder="Search tasks…" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="search">
+  <div id="count"></div>
+</header>
+<main id="list"><div class="msg">Loading…</div></main>
+<script>
+const listEl=document.getElementById('list'),qEl=document.getElementById('q'),countEl=document.getElementById('count');
+let all=[];
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function dueBadge(t){
+  const d=t.deadline||t.scheduled;
+  if(!d)return '';
+  const today=new Date();today.setHours(0,0,0,0);
+  const dt=new Date(d+'T00:00:00');
+  const past=dt<today;
+  return `<span class="due${past?' past':''}">${t.deadline?'Due':'Sched'} ${esc(d)}</span>`;
+}
+function task(t){
+  const tags=(t.tags||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join('');
+  const ctx=t.context?`<div class="tctx">${esc(t.context)}</div>`:'';
+  const metaInner=dueBadge(t)+tags;
+  const meta=metaInner?`<div class="tmeta">${metaInner}</div>`:'';
+  return `<div class="task"><span class="tmark">○</span><div class="tbody">`
+    +`<div class="ttitle">${esc(t.title)}</div>${ctx}${meta}</div></div>`;
+}
+function render(items){
+  if(!items.length){listEl.innerHTML='<div class="msg">No matches</div>';countEl.textContent='0 tasks';return;}
+  const groups=new Map();
+  for(const t of items){const k=t.group||'Other';if(!groups.has(k))groups.set(k,{area:t.area,items:[]});groups.get(k).items.push(t);}
+  let html='';
+  for(const [name,g] of groups){
+    html+=`<div class="group-h">${g.area?`<span class="area">${esc(g.area)} · </span>`:''}${esc(name)}</div>`+g.items.map(task).join('');
+  }
+  listEl.innerHTML=html;
+  countEl.textContent=items.length+(items.length===1?' task':' tasks');
+}
+function applyFilter(){
+  const q=qEl.value.trim().toLowerCase();
+  if(!q){render(all);return;}
+  const terms=q.split(/\s+/);
+  render(all.filter(t=>{
+    const hay=(t.title+' '+(t.group||'')+' '+(t.area||'')+' '+(t.context||'')+' '+(t.tags||[]).join(' ')).toLowerCase();
+    return terms.every(x=>hay.includes(x));
+  }));
+}
+qEl.addEventListener('input',applyFilter);
+fetch('api/tasks').then(r=>{if(!r.ok)throw 0;return r.json();})
+  .then(ts=>{all=ts;render(all);})
+  .catch(()=>{listEl.innerHTML='<div class="msg">Couldn’t load tasks.</div>';});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
