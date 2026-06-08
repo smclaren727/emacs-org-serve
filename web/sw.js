@@ -1,7 +1,7 @@
 // Offline cache: cache-first for the app shell, network-first for the JSON APIs
 // (fresh when online, last-known when offline — including notes you've opened).
-const CACHE = 'vulpea-v5';
-const SHELL = ['./', 'index.html', 'notes.html', 'bookmarks.html', 'journal.html', 'tasks.html', 'org.js', 'app.css', 'manifest.json', 'icon.svg'];
+const CACHE = 'vulpea-v6';
+const SHELL = ['./', 'index.html', 'notes.html', 'bookmarks.html', 'saves.html', 'journal.html', 'tasks.html', 'org.js', 'app.css', 'manifest.json', 'icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

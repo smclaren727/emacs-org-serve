@@ -43,3 +43,15 @@ main{padding:12px 16px calc(env(safe-area-inset-bottom) + 28px);display:flex;fle
 .org li{margin:.2em 0}
 .org code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:.92em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .org a{word-break:break-word}
+/* saves */
+.filters{display:flex;gap:8px;margin-top:8px}
+.filter{flex:1 1 auto;padding:7px 10px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);font:inherit;font-size:13px;font-weight:600}
+.filter.active{color:#0d1117;background:var(--accent);border-color:var(--accent)}
+.save-item{display:flex;gap:12px;align-items:flex-start}
+.save-main{flex:1;min-width:0}
+.save-thumb{flex:0 0 56px;width:56px;height:56px;object-fit:cover;border-radius:10px;background:var(--panel2)}
+.src-badge{font-size:10px;font-weight:700;border-radius:5px;padding:1px 6px;letter-spacing:.04em;white-space:nowrap}
+.src-x{background:#1d3a52;color:#7cc4ff}
+.src-sl{background:#2c3d2f;color:#9bd5a0}
+.full-badge{color:#9bd5a0}
+.md-img{max-width:100%;border-radius:10px;margin:8px 0}

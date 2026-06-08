@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2430">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vulpea">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="app.css">
+<title>Saves · Vulpea</title>
+</head>
+<body>
+<header>
+  <nav class="tabs"><a class="tab" href="index.html">Contacts</a><a class="tab" href="notes.html">Notes</a><a class="tab" href="bookmarks.html">Bookmarks</a><a class="tab active" href="saves.html">Saves</a><a class="tab" href="journal.html">Journal</a><a class="tab" href="tasks.html">Tasks</a></nav>
+  <input id="q" type="search" placeholder="Search saves…" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="search">
+  <div class="filters" id="filters"><button type="button" class="filter active" data-src="all">All</button><button type="button" class="filter" data-src="save-link">Saved Links</button><button type="button" class="filter" data-src="x">X</button></div>
+  <div id="count"></div>
+</header>
+<main id="list"><div class="msg">Loading…</div></main>
+<main id="detail" style="display:none"></main>
+<script src="org.js"></script>
+<script>
+const listView=document.getElementById('list'),detailView=document.getElementById('detail');
+const qEl=document.getElementById('q'),countEl=document.getElementById('count'),filtersEl=document.getElementById('filters');
+let all=[],src='all';
+const fmtNum=n=>n>=1000?(n/1000).toFixed(1).replace(/\.0$/,'')+'k':''+n;
+function badge(s){return s.source==='x'?'<span class="src-badge src-x">X</span>':'<span class="src-badge src-sl">Saved</span>';}
+function sub(s){
+  const bits=[];
+  if(s.author)bits.push(esc(s.author));
+  if(s.source==='x'&&s.likes)bits.push('♥ '+fmtNum(s.likes));
+  if(s.source==='save-link'&&s.fullText)bits.push('<span class="full-badge">full text</span>');
+  if(s.date)bits.push(esc(s.date));
+  return bits.join(' · ');
+}
+function card(s){
+  const tags=(s.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
+  const thumb=s.thumb?`<img class="save-thumb" src="${esc(s.thumb)}" loading="lazy" alt="">`:'';
+  return `<a class="note-item save-item" href="#s=${esc(s.source)}~${encodeURIComponent(s.id)}">`
+    +`<div class="save-main"><div class="note-title">${esc(s.title)}</div>`
+    +`<div class="note-loc">${badge(s)} ${sub(s)}</div>`
+    +(tags?`<div class="note-tags">${tags}</div>`:'')+`</div>${thumb}</a>`;
+}
+function visible(){
+  let items=src==='all'?all:all.filter(s=>s.source===src);
+  const q=qEl.value.trim().toLowerCase();
+  if(q){const terms=q.split(/\s+/);items=items.filter(s=>{
+    const hay=(s.title+' '+(s.author||'')+' '+(s.url||'')+' '+(s.summary||'')+' '+(s.tags||[]).join(' ')).toLowerCase();
+    return terms.every(t=>hay.includes(t));
+  });}
+  return items;
+}
+function renderList(){
+  const items=visible();
+  listView.innerHTML=items.length?items.map(card).join(''):'<div class="msg">No matches</div>';
+  countEl.textContent=items.length+(items.length===1?' save':' saves');
+}
+function renderMd(text){
+  const lines=text.split('\n');let html='',inList=false;
+  const inline=t=>{
+    t=esc(t);
+    t=t.replace(/!\[[^\]]*\]\(([^)]+)\)/g,(m,u)=>`<img class="md-img" src="${u}" loading="lazy" alt="">`);
+    t=t.replace(/\[\[[^\]]+\]\]/g,'');
+    t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,d,u)=>`<a href="${u}" target="_blank" rel="noopener">${d}</a>`);
+    t=t.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+    return t;
+  };
+  const close=()=>{if(inList){html+='</ul>';inList=false;}};
+  for(const raw of lines){
+    const line=raw.replace(/\s+$/,'');
+    if(!line.trim()){close();continue;}
+    if(/^<!--/.test(line))continue;
+    let m;
+    if(m=line.match(/^(#{1,6})\s+(.*)$/)){close();const l=Math.min(m[1].length+1,6);html+=`<h${l}>${inline(m[2])}</h${l}>`;continue;}
+    if(m=line.match(/^\s*[-*]\s+(.*)$/)){if(!inList){html+='<ul>';inList=true;}html+=`<li>${inline(m[1])}</li>`;continue;}
+    close();html+=`<p>${inline(line)}</p>`;
+  }
+  close();return html||'<p class="msg">(empty)</p>';
+}
+async function showDetail(source,id){
+  listView.style.display='none';detailView.style.display='block';
+  detailView.innerHTML='<div class="msg">Loading…</div>';window.scrollTo(0,0);
+  try{
+    const r=await fetch('api/save?source='+encodeURIComponent(source)+'&id='+encodeURIComponent(id));
+    if(!r.ok)throw new Error(r.status);
+    const d=await r.json(),m=d.meta||{};
+    const body=d.format==='org'?renderOrg(d.body||''):renderMd(d.body||'');
+    const link=m.url?` · <a href="${esc(m.url)}" target="_blank" rel="noopener">source ↗</a>`:'';
+    const note=(m.source==='save-link'&&!m.fullText)?'<div class="msg" style="padding:14px 0;text-align:left">Metadata only — open the source for the full article.</div>':'';
+    detailView.innerHTML=`<a class="back" href="#">‹ Saves</a>`
+      +`<h1 class="detail-title">${esc(m.title||'')}</h1>`
+      +`<div class="note-loc">${badge(m)} ${esc(m.author||'')}${m.date?' · '+esc(m.date):''}${link}</div>`
+      +note+`<article class="org">${body}</article>`;
+  }catch(e){
+    detailView.innerHTML=`<a class="back" href="#">‹ Saves</a><div class="msg">Couldn’t load this item.</div>`;
+  }
+}
+function route(){
+  const m=location.hash.match(/^#s=([^~]+)~(.+)$/);
+  if(m){showDetail(decodeURIComponent(m[1]),decodeURIComponent(m[2]));}
+  else{detailView.style.display='none';listView.style.display='block';}
+}
+window.addEventListener('hashchange',route);
+qEl.addEventListener('input',renderList);
+filtersEl.addEventListener('click',e=>{
+  const b=e.target.closest('.filter');if(!b)return;
+  src=b.dataset.src;
+  for(const el of filtersEl.children)el.classList.toggle('active',el===b);
+  renderList();
+});
+fetch('api/saves').then(r=>{if(!r.ok)throw 0;return r.json();})
+  .then(ss=>{all=ss;renderList();route();})
+  .catch(()=>{listView.innerHTML='<div class="msg">Couldn’t load saves.</div>';});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>

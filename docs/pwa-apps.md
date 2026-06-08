@@ -23,8 +23,9 @@ Apps read from two places — keep this distinction in mind when adding one:
 | **Contacts** | 169 people; tap to call/email | DB props (`EMAIL*`/`PHONE*`/`COMPANY`) | rich | ✅ built |
 | **Notes** | all 285 notes/headlines + body | DB + file slice | full | ✅ built |
 | **Bookmarks** | 65 links grouped by category | file parse (`bookmarks.org`) | 65 | ✅ built |
+| **Saves** | unified capture feed (Save-Link clips + Field Theory X bookmarks), newest-first, search + source filter, inline reader | files (`Save-Link/items/*.org` + `X-Bookmarks/markdown/`) | 29 + 811 | ✅ built |
 | **Tasks** | open TODOs grouped by area/project, with parent-heading context + due dates | DB (`todo`) | 95 (≈no dates) | ✅ built |
-| **Reading List** | saved articles (title/URL/date) → read or open | files (`Read-Later/items/` + `logs/index.jsonl`) | 29 | ▢ planned (flagship) |
+| **Reading List** | folded into **Saves** for reads — the live queue is `Save-Link/`; the planned `Read-Later/` is still empty | — | — | ↪ folded into Saves |
 | **Today / Agenda** | scheduled / due today | DB (`scheduled`/`deadline`) | ~none (1 / 4) | ⛔ deferred — needs a scheduling habit |
 | **Journal** | daily entries, newest first, bodies inline | DB (tag `journal`) + file body | 3 | ✅ built |
 
@@ -42,12 +43,13 @@ Notes on Tasks & the deferred one:
 - `GET /api/contacts`
 - `GET /api/notes` · `GET /api/note?id=<id>`
 - `GET /api/bookmarks`
+- `GET /api/saves` · `GET /api/save?source=&id=` · `GET /api/save-media?file=`
 - `GET /api/journal`
 - `GET /api/tasks`
 - *(planned)* `GET /api/reading`
 
-UI: one PWA, tabbed (Contacts / Notes / Bookmarks / Journal / Tasks), shared `web/app.css`
-plus `web/org.js` (the read-only Org→HTML renderer shared by Notes and Journal).
+UI: one PWA, tabbed (Contacts / Notes / Bookmarks / Saves / Journal / Tasks), shared `web/app.css`
+plus `web/org.js` (the read-only Org→HTML renderer shared by Notes, Journal, and Saves).
 
 ## Writes (deferred — decide per app)
 

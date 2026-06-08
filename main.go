@@ -15,9 +15,11 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -595,6 +597,338 @@ func bookmarks() ([]Bookmark, error) {
 }
 
 // ---------------------------------------------------------------------------
+// Saves (unified read over the capture pipelines: Save-Link web clips +
+// Field Theory X bookmarks). File-based — these items are not indexed in
+// vulpea.db, so this path stays Emacs-independent.
+// ---------------------------------------------------------------------------
+
+// Save is one captured item from any pipeline, normalized for the PWA.
+type Save struct {
+	ID       string   `json:"id"`     // routing id = file basename (no extension)
+	Source   string   `json:"source"` // "save-link" | "x"
+	Type     string   `json:"type"`   // "x-post" | "article"
+	Title    string   `json:"title"`
+	URL      string   `json:"url"`
+	Author   string   `json:"author,omitempty"`
+	Date     string   `json:"date"` // YYYY-MM-DD
+	Tags     []string `json:"tags"`
+	Summary  string   `json:"summary,omitempty"`
+	FullText bool     `json:"fullText"`         // we hold the saved body locally
+	Status   string   `json:"status,omitempty"` // Save-Link snapshot status
+	Thumb    string   `json:"thumb,omitempty"`  // api/save-media?file=…
+	Likes    int      `json:"likes,omitempty"`
+	OrgID    string   `json:"orgId,omitempty"` // Save-Link Org ID (for later writes)
+}
+
+func saveLinkDir() string {
+	return env("SAVE_LINK_DIR", filepath.Join(vaultDir(), "50-Resources", "Save-Link"))
+}
+func xBookmarksDir() string {
+	return env("X_BOOKMARKS_DIR", filepath.Join(vaultDir(), "50-Resources", "X-Bookmarks"))
+}
+func xMediaDir() string { return filepath.Join(xBookmarksDir(), "bookmarks", "media") }
+
+var (
+	mdMediaRe    = regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`)
+	origTweetRe  = regexp.MustCompile(`\[Original tweet\]\((https?://[^)]+)\)`)
+	mdH1HandleRe = regexp.MustCompile(`(?m)^#\s*(@\S+)`)
+)
+
+func firstNonEmpty(xs ...string) string {
+	for _, x := range xs {
+		if strings.TrimSpace(x) != "" {
+			return x
+		}
+	}
+	return ""
+}
+
+func collapseWS(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return strings.TrimSpace(string(r[:n])) + "…"
+}
+
+func atoiSafe(s string) int { n, _ := strconv.Atoi(strings.TrimSpace(s)); return n }
+
+// orgFirstDrawer returns the key→value pairs of the first :PROPERTIES: drawer
+// (the item-level drawer; later snapshot sub-drawers are ignored).
+func orgFirstDrawer(s string) map[string]string {
+	out := map[string]string{}
+	i := strings.Index(s, ":PROPERTIES:")
+	if i < 0 {
+		return out
+	}
+	rest := s[i+len(":PROPERTIES:"):]
+	if j := strings.Index(rest, ":END:"); j >= 0 {
+		rest = rest[:j]
+	}
+	for _, line := range strings.Split(rest, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) < 2 || line[0] != ':' {
+			continue
+		}
+		line = line[1:]
+		c := strings.IndexByte(line, ':')
+		if c < 0 {
+			continue
+		}
+		out[line[:c]] = strings.TrimSpace(line[c+1:])
+	}
+	return out
+}
+
+// orgKeyword returns the value of a "#+key:" line (case-insensitive).
+func orgKeyword(s, key string) string {
+	re := regexp.MustCompile(`(?im)^#\+` + regexp.QuoteMeta(key) + `:\s*(.+?)\s*$`)
+	if m := re.FindStringSubmatch(s); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// yamlFrontmatter parses the leading --- … --- block into key→value strings.
+// Only the file-leading block is read, so "---" rules inside the body are safe.
+func yamlFrontmatter(s string) map[string]string {
+	out := map[string]string{}
+	s = strings.TrimLeft(s, "\ufeff \t\r\n")
+	if !strings.HasPrefix(s, "---") {
+		return out
+	}
+	rest := s[3:]
+	end := strings.Index(rest, "\n---")
+	if end < 0 {
+		return out
+	}
+	for _, line := range strings.Split(rest[:end], "\n") {
+		t := strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if t == "" || strings.HasPrefix(t, "#") {
+			continue
+		}
+		c := strings.IndexByte(line, ':')
+		if c < 0 {
+			continue
+		}
+		out[strings.TrimSpace(line[:c])] = strings.Trim(strings.TrimSpace(line[c+1:]), `"`)
+	}
+	return out
+}
+
+// stripFrontmatter drops a leading --- … --- block.
+func stripFrontmatter(s string) string {
+	t := strings.TrimLeft(s, "\ufeff \t\r\n")
+	if !strings.HasPrefix(t, "---") {
+		return s
+	}
+	rest := t[3:]
+	i := strings.Index(rest, "\n---")
+	if i < 0 {
+		return s
+	}
+	rest = rest[i+len("\n---"):]
+	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
+		return rest[nl+1:]
+	}
+	return ""
+}
+
+// stripMdH1 drops a leading "# …" markdown heading line.
+func stripMdH1(s string) string {
+	s = strings.TrimLeft(s, " \t\r\n")
+	if strings.HasPrefix(s, "# ") {
+		if nl := strings.IndexByte(s, '\n'); nl >= 0 {
+			return s[nl+1:]
+		}
+		return ""
+	}
+	return s
+}
+
+// mediaURL maps an X media reference to the guarded media endpoint.
+func mediaURL(ref string) string {
+	return "api/save-media?file=" + url.QueryEscape(filepath.Base(ref))
+}
+
+// saveLinkFromFile builds a Save from one Save-Link items/*.org file.
+func saveLinkFromFile(p string) (Save, bool) {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return Save{}, false
+	}
+	s := string(b)
+	d := orgFirstDrawer(s)
+	base := strings.TrimSuffix(filepath.Base(p), ".org")
+	link := firstNonEmpty(d["CANONICAL_URL"], d["URL"])
+	date := firstNonEmpty(orgDateRe.FindString(orgKeyword(s, "date")),
+		orgDateRe.FindString(d["CAPTURED"]), orgDateRe.FindString(base))
+	tags := []string{}
+	for _, t := range strings.Split(d["TAGS"], ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			tags = append(tags, t)
+		}
+	}
+	status := d["SNAPSHOT_STATUS"]
+	return Save{
+		ID: base, Source: "save-link", Type: "article",
+		Title: firstNonEmpty(orgKeyword(s, "title"), link, base),
+		URL:   link, Author: d["SOURCE_APP"], Date: date, Tags: tags,
+		FullText: status == "ok", Status: status, OrgID: d["ID"],
+	}, true
+}
+
+// xFromFile builds a Save from one Field Theory markdown/bookmarks/*.md file.
+func xFromFile(p string) (Save, bool) {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return Save{}, false
+	}
+	s := string(b)
+	fm := yamlFrontmatter(s)
+	base := strings.TrimSuffix(filepath.Base(p), ".md")
+	body := stripFrontmatter(s)
+	text := stripMdH1(body)
+	for _, marker := range []string{"\n## Related", "\n## Media", "\n<!--", "\n[Original tweet]"} {
+		if i := strings.Index(text, marker); i >= 0 {
+			text = text[:i]
+		}
+	}
+	text = collapseWS(text)
+	link := fm["source_url"]
+	if link == "" {
+		if m := origTweetRe.FindStringSubmatch(s); m != nil {
+			link = m[1]
+		}
+	}
+	handle := fm["author"]
+	if handle == "" {
+		if m := mdH1HandleRe.FindStringSubmatch(body); m != nil {
+			handle = m[1]
+		}
+	}
+	thumb := ""
+	if m := mdMediaRe.FindStringSubmatch(body); m != nil {
+		thumb = mediaURL(m[1])
+	}
+	return Save{
+		ID: base, Source: "x", Type: "x-post",
+		Title: firstNonEmpty(truncateRunes(text, 180), handle, base),
+		URL:   link, Author: handle,
+		Date:     firstNonEmpty(fm["posted_at"], orgDateRe.FindString(base)),
+		Tags:     []string{},
+		FullText: true, Thumb: thumb, Likes: atoiSafe(fm["likes"]),
+	}, true
+}
+
+// readSaves builds Saves from every *ext file in dir via build.
+func readSaves(dir, ext string, build func(string) (Save, bool)) []Save {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []Save
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ext) {
+			continue
+		}
+		if sv, ok := build(filepath.Join(dir, e.Name())); ok {
+			out = append(out, sv)
+		}
+	}
+	return out
+}
+
+// saves returns every captured item, newest first.
+func saves() []Save {
+	out := readSaves(filepath.Join(saveLinkDir(), "items"), ".org", saveLinkFromFile)
+	out = append(out, readSaves(filepath.Join(xBookmarksDir(), "markdown", "bookmarks"), ".md", xFromFile)...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Date != out[j].Date {
+			return out[i].Date > out[j].Date
+		}
+		return out[i].Title < out[j].Title
+	})
+	return out
+}
+
+func handleSaves(w http.ResponseWriter, r *http.Request) {
+	ss := saves()
+	if ss == nil {
+		ss = []Save{}
+	}
+	writeJSON(w, ss)
+}
+
+// handleSave returns one item plus its full body for the reader view.
+func handleSave(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" || id != filepath.Base(id) || strings.Contains(id, "..") {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	var path, format string
+	switch r.URL.Query().Get("source") {
+	case "save-link":
+		path, format = filepath.Join(saveLinkDir(), "items", id+".org"), "org"
+	case "x":
+		path, format = filepath.Join(xBookmarksDir(), "markdown", "bookmarks", id+".md"), "markdown"
+	default:
+		http.Error(w, "bad source", http.StatusBadRequest)
+		return
+	}
+	if !withinVault(path) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	var meta Save
+	var ok bool
+	body := string(b)
+	if format == "org" {
+		meta, ok = saveLinkFromFile(path)
+	} else {
+		meta, ok = xFromFile(path)
+		body = mdMediaRe.ReplaceAllStringFunc(stripFrontmatter(body), func(m string) string {
+			return "![](" + mediaURL(mdMediaRe.FindStringSubmatch(m)[1]) + ")"
+		})
+	}
+	if !ok {
+		http.Error(w, "parse failed", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"meta": meta, "format": format, "body": body})
+}
+
+// handleSaveMedia serves a single Field Theory media image (basename only).
+func handleSaveMedia(w http.ResponseWriter, r *http.Request) {
+	file := r.URL.Query().Get("file")
+	if file == "" || file != filepath.Base(file) || strings.Contains(file, "..") {
+		http.Error(w, "bad file", http.StatusBadRequest)
+		return
+	}
+	switch strings.ToLower(filepath.Ext(file)) {
+	case ".jpg", ".jpeg", ".png", ".webp", ".gif":
+	default:
+		http.Error(w, "unsupported", http.StatusBadRequest)
+		return
+	}
+	path := filepath.Join(xMediaDir(), file)
+	if !withinVault(path) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeFile(w, r, path)
+}
+
+// ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
 
@@ -699,6 +1033,9 @@ func main() {
 	mux.HandleFunc("/api/journal", handleJournal)
 	mux.HandleFunc("/api/tasks", handleTasks)
 	mux.HandleFunc("/api/bookmarks", handleBookmarks)
+	mux.HandleFunc("/api/saves", handleSaves)
+	mux.HandleFunc("/api/save", handleSave)
+	mux.HandleFunc("/api/save-media", handleSaveMedia)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
