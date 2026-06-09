@@ -15,7 +15,6 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -266,7 +265,7 @@ func readBody(path string, level, pos int) (string, error) {
 func notesList() ([]NoteMeta, error) {
 	rows, err := db.Query(`
 SELECT id, title, level, outline_path, todo, scheduled, deadline, path
-FROM notes ORDER BY path, pos`)
+FROM notes WHERE path NOT LIKE '%/References/%' ORDER BY path, pos`)
 	if err != nil {
 		return nil, err
 	}
@@ -597,9 +596,11 @@ func bookmarks() ([]Bookmark, error) {
 }
 
 // ---------------------------------------------------------------------------
-// Saves (unified read over the capture pipelines: Save-Link web clips +
-// Field Theory X bookmarks). File-based — these items are not indexed in
-// vulpea.db, so this path stays Emacs-independent.
+// Saves (reader over the enriched, triaged References/ store — Phase 5). The
+// raw capture pipelines (Save-Link web clips + Field Theory X bookmarks) are
+// folded into References/ upstream by the Emacs harness; the X media endpoint
+// below still serves their cached images. File-based — bodies live only in the
+// .org files, so this path stays Emacs-independent.
 // ---------------------------------------------------------------------------
 
 // Save is one captured item from any pipeline, normalized for the PWA.
@@ -620,9 +621,6 @@ type Save struct {
 	OrgID    string   `json:"orgId,omitempty"` // Save-Link Org ID (for later writes)
 }
 
-func saveLinkDir() string {
-	return env("SAVE_LINK_DIR", filepath.Join(vaultDir(), "50-Resources", "Save-Link"))
-}
 func xBookmarksDir() string {
 	return env("X_BOOKMARKS_DIR", filepath.Join(vaultDir(), "50-Resources", "X-Bookmarks"))
 }
@@ -632,12 +630,6 @@ func xMediaDir() string { return filepath.Join(xBookmarksDir(), "bookmarks", "me
 func referencesDir() string {
 	return env("REFERENCES_DIR", filepath.Join(vaultDir(), "References"))
 }
-
-var (
-	mdMediaRe    = regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`)
-	origTweetRe  = regexp.MustCompile(`\[Original tweet\]\((https?://[^)]+)\)`)
-	mdH1HandleRe = regexp.MustCompile(`(?m)^#\s*(@\S+)`)
-)
 
 func firstNonEmpty(xs ...string) string {
 	for _, x := range xs {
@@ -649,16 +641,6 @@ func firstNonEmpty(xs ...string) string {
 }
 
 func collapseWS(s string) string { return strings.Join(strings.Fields(s), " ") }
-
-func truncateRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return strings.TrimSpace(string(r[:n])) + "…"
-}
-
-func atoiSafe(s string) int { n, _ := strconv.Atoi(strings.TrimSpace(s)); return n }
 
 // orgFirstDrawer returns the key→value pairs of the first :PROPERTIES: drawer
 // (the item-level drawer; later snapshot sub-drawers are ignored).
@@ -694,138 +676,6 @@ func orgKeyword(s, key string) string {
 		return m[1]
 	}
 	return ""
-}
-
-// yamlFrontmatter parses the leading --- … --- block into key→value strings.
-// Only the file-leading block is read, so "---" rules inside the body are safe.
-func yamlFrontmatter(s string) map[string]string {
-	out := map[string]string{}
-	s = strings.TrimLeft(s, "\ufeff \t\r\n")
-	if !strings.HasPrefix(s, "---") {
-		return out
-	}
-	rest := s[3:]
-	end := strings.Index(rest, "\n---")
-	if end < 0 {
-		return out
-	}
-	for _, line := range strings.Split(rest[:end], "\n") {
-		t := strings.TrimSpace(strings.TrimRight(line, "\r"))
-		if t == "" || strings.HasPrefix(t, "#") {
-			continue
-		}
-		c := strings.IndexByte(line, ':')
-		if c < 0 {
-			continue
-		}
-		out[strings.TrimSpace(line[:c])] = strings.Trim(strings.TrimSpace(line[c+1:]), `"`)
-	}
-	return out
-}
-
-// stripFrontmatter drops a leading --- … --- block.
-func stripFrontmatter(s string) string {
-	t := strings.TrimLeft(s, "\ufeff \t\r\n")
-	if !strings.HasPrefix(t, "---") {
-		return s
-	}
-	rest := t[3:]
-	i := strings.Index(rest, "\n---")
-	if i < 0 {
-		return s
-	}
-	rest = rest[i+len("\n---"):]
-	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
-		return rest[nl+1:]
-	}
-	return ""
-}
-
-// stripMdH1 drops a leading "# …" markdown heading line.
-func stripMdH1(s string) string {
-	s = strings.TrimLeft(s, " \t\r\n")
-	if strings.HasPrefix(s, "# ") {
-		if nl := strings.IndexByte(s, '\n'); nl >= 0 {
-			return s[nl+1:]
-		}
-		return ""
-	}
-	return s
-}
-
-// mediaURL maps an X media reference to the guarded media endpoint.
-func mediaURL(ref string) string {
-	return "api/save-media?file=" + url.QueryEscape(filepath.Base(ref))
-}
-
-// saveLinkFromFile builds a Save from one Save-Link items/*.org file.
-func saveLinkFromFile(p string) (Save, bool) {
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return Save{}, false
-	}
-	s := string(b)
-	d := orgFirstDrawer(s)
-	base := strings.TrimSuffix(filepath.Base(p), ".org")
-	link := firstNonEmpty(d["CANONICAL_URL"], d["URL"])
-	date := firstNonEmpty(orgDateRe.FindString(orgKeyword(s, "date")),
-		orgDateRe.FindString(d["CAPTURED"]), orgDateRe.FindString(base))
-	tags := []string{}
-	for _, t := range strings.Split(d["TAGS"], ",") {
-		if t = strings.TrimSpace(t); t != "" {
-			tags = append(tags, t)
-		}
-	}
-	status := d["SNAPSHOT_STATUS"]
-	return Save{
-		ID: base, Source: "save-link", Type: "article",
-		Title: firstNonEmpty(orgKeyword(s, "title"), link, base),
-		URL:   link, Author: d["SOURCE_APP"], Date: date, Tags: tags,
-		FullText: status == "ok", Status: status, OrgID: d["ID"],
-	}, true
-}
-
-// xFromFile builds a Save from one Field Theory markdown/bookmarks/*.md file.
-func xFromFile(p string) (Save, bool) {
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return Save{}, false
-	}
-	s := string(b)
-	fm := yamlFrontmatter(s)
-	base := strings.TrimSuffix(filepath.Base(p), ".md")
-	body := stripFrontmatter(s)
-	text := stripMdH1(body)
-	for _, marker := range []string{"\n## Related", "\n## Media", "\n<!--", "\n[Original tweet]"} {
-		if i := strings.Index(text, marker); i >= 0 {
-			text = text[:i]
-		}
-	}
-	text = collapseWS(text)
-	link := fm["source_url"]
-	if link == "" {
-		if m := origTweetRe.FindStringSubmatch(s); m != nil {
-			link = m[1]
-		}
-	}
-	handle := fm["author"]
-	if handle == "" {
-		if m := mdH1HandleRe.FindStringSubmatch(body); m != nil {
-			handle = m[1]
-		}
-	}
-	thumb := ""
-	if m := mdMediaRe.FindStringSubmatch(body); m != nil {
-		thumb = mediaURL(m[1])
-	}
-	return Save{
-		ID: base, Source: "x", Type: "x-post",
-		Title: firstNonEmpty(truncateRunes(text, 180), handle, base),
-		URL:   link, Author: handle,
-		Date:     firstNonEmpty(fm["posted_at"], orgDateRe.FindString(base)),
-		Tags:     []string{},
-		FullText: true, Thumb: thumb, Likes: atoiSafe(fm["likes"]),
-	}, true
 }
 
 // readSaves builds Saves from every *ext file in dir via build.
@@ -905,10 +755,56 @@ func referenceFromFile(p string) (Save, bool) {
 	}, true
 }
 
+// xMediaFileRe matches a Field Theory tweet-media file "<tweetId>-<hash>.<ext>".
+// Author profile images are hash-only (no tweetId prefix), so they're excluded.
+var xMediaFileRe = regexp.MustCompile(`^(\d{10,})-[0-9a-f]+\.(?:jpg|jpeg|png|webp|gif)$`)
+
+// xStatusRe pulls the numeric tweet id from an x.com/.../status/<id> URL.
+var xStatusRe = regexp.MustCompile(`/status/(\d+)`)
+
+// xThumbIndex maps tweetId -> a local media filename (first per tweet), read
+// fresh from the X media dir so newly-synced media appears without a restart.
+func xThumbIndex() map[string]string {
+	entries, err := os.ReadDir(xMediaDir())
+	if err != nil {
+		return nil
+	}
+	idx := map[string]string{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if m := xMediaFileRe.FindStringSubmatch(e.Name()); m != nil {
+			if _, ok := idx[m[1]]; !ok {
+				idx[m[1]] = e.Name()
+			}
+		}
+	}
+	return idx
+}
+
+// tweetID extracts the tweet id from a status URL ("" if none).
+func tweetID(rawurl string) string {
+	if m := xStatusRe.FindStringSubmatch(rawurl); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
 // saves returns every triaged reference note, newest first (Phase 5: reads the
-// enriched References/ store rather than raw Ingest).
+// enriched References/ store rather than raw Ingest). X-post notes get a Thumb
+// pointing at their cached media image when one was downloaded.
 func saves() []Save {
 	out := readSaves(referencesDir(), ".org", referenceFromFile)
+	if idx := xThumbIndex(); len(idx) > 0 {
+		for i := range out {
+			if out[i].Source == "x" && out[i].Thumb == "" {
+				if f, ok := idx[tweetID(out[i].URL)]; ok {
+					out[i].Thumb = "api/save-media?file=" + f
+				}
+			}
+		}
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Date != out[j].Date {
 			return out[i].Date > out[j].Date
