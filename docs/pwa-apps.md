@@ -21,9 +21,9 @@ Apps read from two places — keep this distinction in mind when adding one:
 | App | Shows | Source | Data (2026-06-09) | Status |
 |---|---|---|---|---|
 | **Contacts** | 169 people; tap to call/email | DB props (`EMAIL*`/`PHONE*`/`COMPANY`) | rich | ✅ built |
-| **Notes** | all ~1,125 notes/headlines + body (now incl. the ~840 References) | DB + file slice | full | ✅ built |
+| **Notes** | ~285 notes/headlines + body (References **excluded** — they live in Saves; `/api/notes` filters `path NOT LIKE '%/References/%'`) | DB + file slice | full | ✅ built |
 | **Bookmarks** | 65 links grouped by category | file parse (`bookmarks.org`) | 65 | ✅ built |
-| **Saves** | triaged, LLM-enriched saves (type/title/summary/tags), newest-first, search + source filter, inline reader | file parse (`References/*.org`; also vulpea-indexed) | 840 | ✅ built |
+| **Saves** | triaged, LLM-enriched saves (type/title/summary/tags) + X-post media thumbnails, newest-first, search + source filter, inline reader | file parse (`References/*.org`; also vulpea-indexed) | 844 | ✅ built |
 | **Tasks** | open TODOs grouped by area/project, with parent-heading context + due dates | DB (`todo`) | 95 (≈no dates) | ✅ built |
 | **Reading List** | folded into **Saves** — every capture (incl. web clips) is auto-filed into `References/` by the triage | — | — | ↪ folded into Saves |
 | **Today / Agenda** | scheduled / due today | DB (`scheduled`/`deadline`) | ~none (1 / 4) | ⛔ deferred — needs a scheduling habit |
@@ -45,7 +45,7 @@ Notes on Tasks & Reading List:
 - `GET /api/contacts`
 - `GET /api/notes` · `GET /api/note?id=<id>`
 - `GET /api/bookmarks`
-- `GET /api/saves` · `GET /api/save?id=` · `GET /api/save-media?file=` *(media legacy)*
+- `GET /api/saves` · `GET /api/save?id=` · `GET /api/save-media?file=` *(serves X-post thumbnails)*
 - `GET /api/journal`
 - `GET /api/tasks`
 
