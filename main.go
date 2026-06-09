@@ -628,6 +628,11 @@ func xBookmarksDir() string {
 }
 func xMediaDir() string { return filepath.Join(xBookmarksDir(), "bookmarks", "media") }
 
+// referencesDir is the canonical triaged store the Saves tab reads (Phase 5).
+func referencesDir() string {
+	return env("REFERENCES_DIR", filepath.Join(vaultDir(), "References"))
+}
+
 var (
 	mdMediaRe    = regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`)
 	origTweetRe  = regexp.MustCompile(`\[Original tweet\]\((https?://[^)]+)\)`)
@@ -841,10 +846,69 @@ func readSaves(dir, ext string, build func(string) (Save, bool)) []Save {
 	return out
 }
 
-// saves returns every captured item, newest first.
+// referenceContent returns the note body after the file-level PROPERTIES drawer
+// and the leading #+keyword lines (i.e. the summary + body + "* Links").
+func referenceContent(s string) string {
+	if i := strings.Index(s, "\n:END:"); i >= 0 {
+		s = s[i+len("\n:END:"):]
+	}
+	lines := strings.Split(s, "\n")
+	k := 0
+	for k < len(lines) {
+		t := strings.TrimSpace(lines[k])
+		if t == "" || strings.HasPrefix(t, "#+") {
+			k++
+			continue
+		}
+		break
+	}
+	return strings.TrimSpace(strings.Join(lines[k:], "\n"))
+}
+
+// referenceSummary returns the first paragraph of the note content.
+func referenceSummary(s string) string {
+	c := referenceContent(s)
+	if i := strings.Index(c, "\n\n"); i >= 0 {
+		c = c[:i]
+	}
+	return collapseWS(c)
+}
+
+// referenceFromFile builds a Save from one References/*.org note — the enriched,
+// triaged canonical record. vulpea indexes these too, but the body lives only in
+// the file, so we parse the file directly (consistent with the other readers).
+func referenceFromFile(p string) (Save, bool) {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return Save{}, false
+	}
+	s := string(b)
+	d := orgFirstDrawer(s)
+	base := strings.TrimSuffix(filepath.Base(p), ".org")
+	src := "save-link"
+	if d["SOURCE"] == "field-theory" {
+		src = "x"
+	}
+	var tags []string
+	for _, t := range strings.Split(orgKeyword(s, "filetags"), ":") {
+		if t = strings.TrimSpace(t); t != "" {
+			tags = append(tags, t)
+		}
+	}
+	date := firstNonEmpty(orgDateRe.FindString(d["CAPTURED"]), orgDateRe.FindString(base))
+	return Save{
+		ID: base, Source: src, Type: firstNonEmpty(d["TYPE"], "other"),
+		Title: firstNonEmpty(orgKeyword(s, "title"), base),
+		URL:   d["URL"], Date: date, Tags: tags,
+		Summary:  referenceSummary(s),
+		FullText: true, Status: d["STATUS"], OrgID: d["ID"],
+	}, true
+}
+
+// saves returns every triaged reference note, newest first (Phase 5: reads the
+// enriched References/ store rather than raw Ingest).
 func saves() []Save {
-	out := readSaves(filepath.Join(saveLinkDir(), "items"), ".org", saveLinkFromFile)
-	out = append(out, readSaves(filepath.Join(xBookmarksDir(), "markdown", "bookmarks"), ".md", xFromFile)...)
+	out := readSaves(referencesDir(), ".org", referenceFromFile)
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Date != out[j].Date {
 			return out[i].Date > out[j].Date
@@ -862,23 +926,14 @@ func handleSaves(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, ss)
 }
 
-// handleSave returns one item plus its full body for the reader view.
+// handleSave returns one reference note plus its body for the reader view.
 func handleSave(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" || id != filepath.Base(id) || strings.Contains(id, "..") {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
-	var path, format string
-	switch r.URL.Query().Get("source") {
-	case "save-link":
-		path, format = filepath.Join(saveLinkDir(), "items", id+".org"), "org"
-	case "x":
-		path, format = filepath.Join(xBookmarksDir(), "markdown", "bookmarks", id+".md"), "markdown"
-	default:
-		http.Error(w, "bad source", http.StatusBadRequest)
-		return
-	}
+	path := filepath.Join(referencesDir(), id+".org")
 	if !withinVault(path) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
@@ -888,22 +943,12 @@ func handleSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	var meta Save
-	var ok bool
-	body := string(b)
-	if format == "org" {
-		meta, ok = saveLinkFromFile(path)
-	} else {
-		meta, ok = xFromFile(path)
-		body = mdMediaRe.ReplaceAllStringFunc(stripFrontmatter(body), func(m string) string {
-			return "![](" + mediaURL(mdMediaRe.FindStringSubmatch(m)[1]) + ")"
-		})
-	}
+	meta, ok := referenceFromFile(path)
 	if !ok {
 		http.Error(w, "parse failed", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{"meta": meta, "format": format, "body": body})
+	writeJSON(w, map[string]any{"meta": meta, "format": "org", "body": referenceContent(string(b))})
 }
 
 // handleSaveMedia serves a single Field Theory media image (basename only).
