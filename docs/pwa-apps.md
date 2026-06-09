@@ -13,15 +13,15 @@ Apps read from two places — keep this distinction in mind when adding one:
 - **`vulpea.db`** (the emacsql index): metadata only (title, tags, properties,
   todo, links, outline). → Contacts, Notes, Tasks.
 - **Synced `.org` / `.jsonl` files** under `~/All-The-Things` (the DB has no body
-  text): note bodies, Reading List, Bookmarks. Read via the file path from the
-  DB, or directly for files vulpea doesn't index.
+  text): note bodies, Saves (`References/*.org`), Bookmarks. Read via the file
+  path from the DB, or directly for files vulpea doesn't index.
 
 ## Apps
 
-| App | Shows | Source | Data (2026-06-06) | Status |
+| App | Shows | Source | Data (2026-06-09) | Status |
 |---|---|---|---|---|
 | **Contacts** | 169 people; tap to call/email | DB props (`EMAIL*`/`PHONE*`/`COMPANY`) | rich | ✅ built |
-| **Notes** | all 285 notes/headlines + body | DB + file slice | full | ✅ built |
+| **Notes** | all ~1,125 notes/headlines + body (now incl. the ~840 References) | DB + file slice | full | ✅ built |
 | **Bookmarks** | 65 links grouped by category | file parse (`bookmarks.org`) | 65 | ✅ built |
 | **Saves** | triaged, LLM-enriched saves (type/title/summary/tags), newest-first, search + source filter, inline reader | file parse (`References/*.org`; also vulpea-indexed) | 840 | ✅ built |
 | **Tasks** | open TODOs grouped by area/project, with parent-heading context + due dates | DB (`todo`) | 95 (≈no dates) | ✅ built |
@@ -29,14 +29,16 @@ Apps read from two places — keep this distinction in mind when adding one:
 | **Today / Agenda** | scheduled / due today | DB (`scheduled`/`deadline`) | ~none (1 / 4) | ⛔ deferred — needs a scheduling habit |
 | **Journal** | daily entries, newest first, bodies inline | DB (tag `journal`) + file body | 3 | ✅ built |
 
-Notes on Tasks & the deferred one:
+Notes on Tasks & Reading List:
 - **Tasks** ships as a *grouped task list*, not a calendar — there's almost no
   scheduled/deadline data yet, so an agenda-by-date would be empty. It groups by
   file (`file_title`) in PARA order, surfaces the parent heading as context, and
   shows the few real due dates as badges.
-- **Reading List** items are real and well-structured (`:URL:`, `:title:`,
-  date, plus a JSONL index) but **not indexed in `vulpea.db`** — it needs the
-  file-based read path, or `vulpea-meta` adoption later.
+- **Reading List** is folded into **Saves**: the harness triage (see
+  `capture-restructure.md`) now enriches every capture into a `References/*.org`
+  note that *is* vulpea-indexed. emacs-org-serve only reads those notes
+  (`referenceFromFile`); it does not run the triage. Bodies still live in the
+  files, so Saves reads them directly.
 
 ## Read API
 
@@ -46,7 +48,6 @@ Notes on Tasks & the deferred one:
 - `GET /api/saves` · `GET /api/save?id=` · `GET /api/save-media?file=` *(media legacy)*
 - `GET /api/journal`
 - `GET /api/tasks`
-- *(planned)* `GET /api/reading`
 
 UI: one PWA, tabbed (Contacts / Notes / Bookmarks / Saves / Journal / Tasks), shared `web/app.css`
 plus `web/org.js` (the read-only Org→HTML renderer shared by Notes, Journal, and Saves).

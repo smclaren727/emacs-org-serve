@@ -1,8 +1,11 @@
 # Capture Restructure + Auto-File (Tier 2) — migration plan
 
-Status: active plan. Created 2026-06-08. The detailed plan for the capture →
+Status: COMPLETE (deployed 2026-06-09). The detailed plan for the capture →
 References → Knowledge restructure and the auto-file (triage) loop. This is the
 "Tier 2" work referenced in `pwa-apps.md`; it spans four repos (see Touch map).
+History below is kept as the build record. Note: the triage/enrichment loop
+lives in the **Emacs-Harness + nix-loxley-node** repos; emacs-org-serve only
+*reads* `References/` (read-only) — it does not run the triage.
 
 ## Goal
 
@@ -203,9 +206,9 @@ save). `all-the-things.org` map updated. **Phase 5** (Saves tab → `References/
 `referenceFromFile` reader; `saves()`/`handleSave` repointed; Save struct + `saves.html`
 unchanged) coded + gofmt'd + verified locally over all 840 (`/api/saves` returns 840 enriched,
 `/api/save` returns the org body); committed at emacs-org-serve **`a462d15`**.
-⏳ **DEPLOY PENDING:** pushing emacs-org-serve `main` is blocked by the autonomous-push
-guardrail — needs an explicit user go-ahead, then node flake-bump emacs-org-serve → rebuild →
-switch. Remaining doc cleanup (post-deploy): `SAVES.md`, `pwa-apps.md`.
+✅ **DEPLOYED (2026-06-09, emacs-org-serve `ff2957a`).** emacs-org-serve `main` pushed,
+node flake-bumped → rebuilt → switched; the live Saves tab now reads `References/`.
+Post-deploy doc cleanup done (`pwa-apps.md`; `SAVES.md` lives in All-The-Things).
 
 ### Phase 4 — Backfill
 Run triage over the existing ~811 X-posts + ~29 clips → `References` notes.
