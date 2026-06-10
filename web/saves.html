@@ -39,7 +39,7 @@ function sub(s){
 }
 function card(s){
   const tags=(s.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
-  const thumb=s.thumb?`<img class="save-thumb" src="${esc(s.thumb)}" loading="lazy" alt="">`:'';
+  const thumb=s.thumb?`<img class="save-thumb" src="${esc(safeUrl(s.thumb))}" loading="lazy" alt="">`:'';
   return `<a class="note-item save-item" href="#s=${esc(s.source)}~${encodeURIComponent(s.id)}">`
     +`<div class="save-main"><div class="note-title">${esc(s.title)}</div>`
     +`<div class="note-loc">${badge(s)} ${sub(s)}</div>`
@@ -63,9 +63,9 @@ function renderMd(text){
   const lines=text.split('\n');let html='',inList=false;
   const inline=t=>{
     t=esc(t);
-    t=t.replace(/!\[[^\]]*\]\(([^)]+)\)/g,(m,u)=>`<img class="md-img" src="${u}" loading="lazy" alt="">`);
+    t=t.replace(/!\[[^\]]*\]\(([^)]+)\)/g,(m,u)=>`<img class="md-img" src="${safeUrl(u)}" loading="lazy" alt="">`);
     t=t.replace(/\[\[[^\]]+\]\]/g,'');
-    t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,d,u)=>`<a href="${u}" target="_blank" rel="noopener">${d}</a>`);
+    t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,d,u)=>`<a href="${safeUrl(u)}" target="_blank" rel="noopener">${d}</a>`);
     t=t.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
     return t;
   };
@@ -89,7 +89,7 @@ async function showDetail(source,id){
     if(!r.ok)throw new Error(r.status);
     const d=await r.json(),m=d.meta||{};
     const body=d.format==='org'?renderOrg(d.body||''):renderMd(d.body||'');
-    const link=m.url?` · <a href="${esc(m.url)}" target="_blank" rel="noopener">source ↗</a>`:'';
+    const link=m.url?` · <a href="${esc(safeUrl(m.url))}" target="_blank" rel="noopener">source ↗</a>`:'';
     const note=(m.source==='save-link'&&!m.fullText)?'<div class="msg" style="padding:14px 0;text-align:left">Metadata only — open the source for the full article.</div>':'';
     detailView.innerHTML=`<a class="back" href="#">‹ Saves</a>`
       +`<h1 class="detail-title">${esc(m.title||'')}</h1>`

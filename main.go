@@ -982,5 +982,29 @@ func main() {
 
 	addr := env("LISTEN", "127.0.0.1:8765")
 	log.Printf("emacs-org-serve on http://%s  (db=%s, vault=%s, read-only)", addr, dbPath(), vaultDir())
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(http.ListenAndServe(addr, withSecurityHeaders(mux)))
+}
+
+// withSecurityHeaders sets a defense-in-depth header set on every response. The
+// PWA pages are static, embedded, and use inline <script>/<style>, so the CSP
+// must allow 'unsafe-inline' for those; the renderers' safeUrl() guards the
+// javascript:/data: href vector that 'unsafe-inline' does not. connect-src
+// 'self' blocks exfiltration of the vault to an external origin.
+func withSecurityHeaders(next http.Handler) http.Handler {
+	const csp = "default-src 'self'; " +
+		"script-src 'self' 'unsafe-inline'; " +
+		"style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' https: data:; " +
+		"connect-src 'self'; " +
+		"object-src 'none'; " +
+		"base-uri 'self'; " +
+		"frame-ancestors 'none'"
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", csp)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("X-Frame-Options", "DENY")
+		next.ServeHTTP(w, r)
+	})
 }

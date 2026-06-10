@@ -25,9 +25,10 @@
 const listEl=document.getElementById('list'),qEl=document.getElementById('q'),countEl=document.getElementById('count');
 let all=[];
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeUrl=u=>{let r=String(u==null?'':u),t='';for(let i=0;i<r.length;i++){const c=r.charCodeAt(i);if(c>31&&c!==127)t+=r[i];}t=t.trim();if(t===''||t[0]==='#'||t[0]==='/'||t[0]==='.')return t;const m=t.match(/^([a-z][a-z0-9+.-]*):/i);return !m?t:(/^(https?|mailto|tel)$/i.test(m[1])?t:'#');};
 function item(b){
   const tags=(b.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
-  return `<a class="note-item" href="${esc(b.url)}" target="_blank" rel="noopener">`
+  return `<a class="note-item" href="${esc(safeUrl(b.url))}" target="_blank" rel="noopener">`
     +`<div class="note-title">${esc(b.title)}</div>`
     +`<div class="note-loc">${esc(b.url)}</div>`
     +(tags?`<div class="note-tags">${tags}</div>`:'')+`</a>`;
