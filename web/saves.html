@@ -56,7 +56,12 @@ function visible(){
 }
 function renderList(){
   const items=visible();
-  listView.innerHTML=items.length?items.map(card).join(''):'<div class="msg">No matches</div>';
+  // Render per-item so one card that throws can't blank the whole tab (e.g. a
+  // stale cached org.js missing a helper) — degrade gracefully instead of
+  // tripping the fetch .catch and showing "Couldn't load saves".
+  let html='';
+  for(const s of items){try{html+=card(s);}catch(e){}}
+  listView.innerHTML=html||'<div class="msg">No matches</div>';
   countEl.textContent=items.length+(items.length===1?' save':' saves');
 }
 function renderMd(text){

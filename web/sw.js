@@ -5,7 +5,7 @@
 //     the offline fallback.
 //   - JSON APIs: network-first, last-known cache when offline.
 //   - static assets (css/js/icons): cache-first.
-const CACHE = 'vulpea-v7';
+const CACHE = 'vulpea-v8';
 // NB: precache './' (the canonical start URL), NOT 'index.html' — the latter
 // 301-redirects to '/', and a redirected response cannot be cached/served safely.
 const SHELL = ['./', 'notes.html', 'bookmarks.html', 'saves.html', 'journal.html', 'tasks.html', 'org.js', 'app.css', 'manifest.json', 'icon.svg'];
