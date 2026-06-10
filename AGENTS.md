@@ -52,7 +52,7 @@ the live DB:
   quotes), `notes.title` is `"Buy Changes - Denim"`, `properties.value` is
   `"a@b.com"`.
 - So `WHERE tag = 'contact'` returns **0 rows**; `WHERE tag = '"contact"'`
-  returns 167. You must **encode query params** (wrap in quotes) and **decode
+  returns 169. You must **encode query params** (wrap in quotes) and **decode
   results** (unquote).
 - The JSON blob columns on `notes` (`tags`, `meta`, `links`, `properties`,
   `aliases`) are **double-encoded** (prin1 of a JSON string; empty shows as
@@ -82,10 +82,10 @@ Backend: `emacsql-sqlite-builtin`. Identifiers use **underscores**.
 Query the normalized tables and join to `notes` for `id`/`title`/`path`. All
 text values are emacsql-encoded — `enc`/`dec` accordingly.
 
-## Data reality (as of 2026-06-05, dev DB)
+## Data reality (as of 2026-06-10, dev DB — counts grow over time)
 
-- **280 notes** from 253 files.
-- **167 notes tagged `contact`** with `EMAIL`/`EMAIL_WORK`/`EMAIL_HOME`/
+- **~287 notes** from ~259 files.
+- **~169 notes tagged `contact`** with `EMAIL`/`EMAIL_WORK`/`EMAIL_HOME`/
   `EMAIL_OTHER`, `PHONE`/`PHONE_CELL`/…, `COMPANY`, etc. in `properties`.
 - The **`meta` table is empty** — vulpea-meta has not been adopted yet.
 
@@ -121,7 +121,7 @@ reading-queue slice (the eventual flagship) depends on the user adopting
 ```sh
 DB=~/.emacs.d/var/vulpea/vulpea.db
 sqlite3 "$DB" '.tables'
-sqlite3 "$DB" "select count(*) from tags where tag='\"contact\"';"   # -> 167
+sqlite3 "$DB" "select count(*) from tags where tag='\"contact\"';"   # -> 169 (grows)
 sqlite3 "$DB" "select value from properties where key='\"EMAIL\"' limit 3;"
 ```
 
