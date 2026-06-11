@@ -5,6 +5,10 @@
 //     the offline fallback.
 //   - JSON APIs: network-first, last-known cache when offline.
 //   - static assets (css/js/icons): cache-first.
+// The server (handleServiceWorker in main.go) rewrites this token to a content
+// hash of the embedded web assets when serving sw.js, so this literal is only a
+// fallback — every deploy that changes an asset auto-busts the cache, no manual
+// bump needed.
 const CACHE = 'vulpea-v8';
 // NB: precache './' (the canonical start URL), NOT 'index.html' — the latter
 // 301-redirects to '/', and a redirected response cannot be cached/served safely.

@@ -8,8 +8,10 @@
 package main
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -966,6 +968,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	swToken := webAssetsToken(sub)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/contacts", handleContacts)
@@ -978,6 +981,7 @@ func main() {
 	mux.HandleFunc("/api/save", handleSave)
 	mux.HandleFunc("/api/save-media", handleSaveMedia)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
+	mux.HandleFunc("/sw.js", handleServiceWorker(sub, swToken))
 	mux.Handle("/", http.FileServer(http.FS(sub)))
 
 	addr := env("LISTEN", "127.0.0.1:8765")
@@ -1007,4 +1011,50 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// swCacheRe matches the service-worker cache token in sw.js so it can be
+// rewritten to a content hash at serve time.
+var swCacheRe = regexp.MustCompile(`vulpea-v[0-9]+`)
+
+// webAssetsToken returns a short hash of every embedded web asset. Serving sw.js
+// with this as its cache token means any asset change auto-busts the PWA cache,
+// so there is no manual sw.js version to remember to bump on deploy.
+func webAssetsToken(sub fs.FS) string {
+	var paths []string
+	_ = fs.WalkDir(sub, ".", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			paths = append(paths, p)
+		}
+		return nil
+	})
+	sort.Strings(paths)
+	h := sha256.New()
+	for _, p := range paths {
+		b, err := fs.ReadFile(sub, p)
+		if err != nil {
+			continue
+		}
+		h.Write([]byte(p))
+		h.Write([]byte{0})
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
+}
+
+// handleServiceWorker serves sw.js with its cache token rewritten to TOKEN, and
+// marks sw.js itself no-cache so the browser always revalidates it and picks up
+// the new token after a deploy that changed any asset.
+func handleServiceWorker(sub fs.FS, token string) http.HandlerFunc {
+	repl := []byte("vulpea-" + token)
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, err := fs.ReadFile(sub, "sw.js")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(swCacheRe.ReplaceAll(b, repl))
+	}
 }

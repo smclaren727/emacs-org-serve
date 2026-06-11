@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"io/fs"
+	"strings"
 	"testing"
 )
 
@@ -68,5 +70,30 @@ func TestDecN(t *testing.T) {
 	}
 	if got := decN(sql.NullString{Valid: false}); got != "" {
 		t.Errorf("decN(NULL) = %q, want empty", got)
+	}
+}
+
+func TestWebAssetsTokenAndServiceWorkerRewrite(t *testing.T) {
+	sub, err := fs.Sub(webFS, "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The token is non-empty and deterministic for a given asset set.
+	t1, t2 := webAssetsToken(sub), webAssetsToken(sub)
+	if t1 == "" || t1 != t2 {
+		t.Fatalf("token unstable/empty: %q vs %q", t1, t2)
+	}
+	// Serving sw.js rewrites the static cache token to the hash, so the literal
+	// fallback can't linger and pin the cache across deploys.
+	raw, err := fs.ReadFile(sub, "sw.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(swCacheRe.ReplaceAll(raw, []byte("vulpea-"+t1)))
+	if !strings.Contains(out, "vulpea-"+t1) {
+		t.Errorf("sw.js cache token not rewritten to the hash %q", t1)
+	}
+	if strings.Contains(out, "vulpea-v8") {
+		t.Errorf("static vulpea-v8 token still present after rewrite")
 	}
 }
