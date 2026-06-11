@@ -46,10 +46,11 @@ Notes on Tasks & Reading List:
 - `GET /api/notes` · `GET /api/note?id=<id>`
 - `GET /api/bookmarks`
 - `GET /api/saves` · `GET /api/save?id=` · `GET /api/save-media?file=` *(serves X-post thumbnails)*
+- `GET /api/feeds` *(node-side elfeed export → feeds.json)*
 - `GET /api/journal`
 - `GET /api/tasks`
 
-UI: one PWA, tabbed (Contacts / Notes / Bookmarks / Saves / Journal / Tasks), shared `web/app.css`
+UI: one PWA, tabbed (Contacts / Notes / Bookmarks / Saves / Feeds / Journal / Tasks), shared `web/app.css`
 plus `web/org.js` (the read-only Org→HTML renderer shared by Notes, Journal, and Saves).
 
 ## Writes (deferred — decide per app)
