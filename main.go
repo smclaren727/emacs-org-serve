@@ -42,6 +42,12 @@ func env(k, def string) string {
 func dbPath() string   { return env("VULPEA_DB", os.ExpandEnv("$HOME/.emacs.d/var/vulpea/vulpea.db")) }
 func vaultDir() string { return env("VAULT_DIR", os.ExpandEnv("$HOME/All-The-Things")) }
 
+// feedsJSON is the elfeed export the node's loxley-feeds-export timer writes
+// (see lisp/eos-feeds.el). It lives outside the synced vault — node-local state.
+func feedsJSON() string {
+	return env("FEEDS_JSON", os.ExpandEnv("$HOME/.local/state/emacs-org-serve/feeds.json"))
+}
+
 // vulpea.db is written by emacsql, which stores every value in its Lisp printed
 // (prin1) form — strings come out double-quote-wrapped. enc wraps a query param
 // the same way; dec unwraps a stored value.
@@ -952,6 +958,21 @@ func handleBookmarks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, bs)
 }
 
+// handleFeeds serves the elfeed entries the node's loxley-feeds-export timer wrote
+// (eos-feeds.el). The file is already a JSON array in the PWA's shape, so we stream
+// it verbatim. A missing file (export hasn't run yet) is not an error — return an
+// empty list so the Feeds tab renders empty rather than failing.
+func handleFeeds(w http.ResponseWriter, r *http.Request) {
+	b, err := os.ReadFile(feedsJSON())
+	if err != nil {
+		writeJSON(w, []any{})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(b)
+}
+
 func main() {
 	var err error
 	dsn := "file:" + dbPath() + "?mode=ro&_pragma=busy_timeout(5000)"
@@ -980,6 +1001,7 @@ func main() {
 	mux.HandleFunc("/api/saves", handleSaves)
 	mux.HandleFunc("/api/save", handleSave)
 	mux.HandleFunc("/api/save-media", handleSaveMedia)
+	mux.HandleFunc("/api/feeds", handleFeeds)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) })
 	mux.HandleFunc("/sw.js", handleServiceWorker(sub, swToken))
 	mux.Handle("/", http.FileServer(http.FS(sub)))

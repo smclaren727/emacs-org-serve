@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2430">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vulpea">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="app.css">
+<title>Feeds · Vulpea</title>
+</head>
+<body>
+<header>
+  <nav class="tabs"><a class="tab" href="./">Contacts</a><a class="tab" href="notes.html">Notes</a><a class="tab" href="bookmarks.html">Bookmarks</a><a class="tab" href="saves.html">Saves</a><a class="tab active" href="feeds.html">Feeds</a><a class="tab" href="journal.html">Journal</a><a class="tab" href="tasks.html">Tasks</a></nav>
+  <input id="q" type="search" placeholder="Search feeds…" autocomplete="off" autocapitalize="none" autocorrect="off" enterkeyhint="search">
+  <div id="count"></div>
+</header>
+<main id="list"><div class="msg">Loading…</div></main>
+<main id="detail" style="display:none"></main>
+<script src="org.js"></script>
+<script>
+const listView=document.getElementById('list'),detailView=document.getElementById('detail');
+const qEl=document.getElementById('q'),countEl=document.getElementById('count');
+let all=[],byId=new Map();
+function fmtDate(sec){
+  if(!sec)return '';
+  const d=new Date(sec*1000);
+  if(isNaN(d.getTime()))return '';
+  const now=new Date();
+  const opts=d.getFullYear()===now.getFullYear()?{month:'short',day:'numeric'}:{year:'numeric',month:'short',day:'numeric'};
+  return d.toLocaleDateString(undefined,opts);
+}
+// Markdown renderer (same safe subset as saves.html): esc()s all text, allowlists
+// link/image URLs via safeUrl(); never injects raw HTML. eos-feeds.el delivers
+// entry bodies as pandoc GFM, so this is all we need.
+function renderMd(text){
+  const lines=text.split('\n');let html='',inList=false;
+  const inline=t=>{
+    t=esc(t);
+    t=t.replace(/!\[[^\]]*\]\(([^)]+)\)/g,(m,u)=>`<img class="md-img" src="${safeUrl(u)}" loading="lazy" alt="">`);
+    t=t.replace(/\[\[[^\]]+\]\]/g,'');
+    t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,d,u)=>`<a href="${safeUrl(u)}" target="_blank" rel="noopener">${d}</a>`);
+    t=t.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+    return t;
+  };
+  const close=()=>{if(inList){html+='</ul>';inList=false;}};
+  for(const raw of lines){
+    const line=raw.replace(/\s+$/,'');
+    if(!line.trim()){close();continue;}
+    if(/^<!--/.test(line))continue;
+    let m;
+    if(m=line.match(/^(#{1,6})\s+(.*)$/)){close();const l=Math.min(m[1].length+1,6);html+=`<h${l}>${inline(m[2])}</h${l}>`;continue;}
+    if(m=line.match(/^\s*[-*]\s+(.*)$/)){if(!inList){html+='<ul>';inList=true;}html+=`<li>${inline(m[1])}</li>`;continue;}
+    if(m=line.match(/^>\s?(.*)$/)){close();html+=`<blockquote>${inline(m[1])}</blockquote>`;continue;}
+    close();html+=`<p>${inline(line)}</p>`;
+  }
+  close();return html||'<p class="msg">(empty)</p>';
+}
+function card(s){
+  const tags=(s.tags||[]).filter(t=>t!=='unread').map(t=>`<span class="tag">${esc(t)}</span>`).join('');
+  const meta=[s.feedTitle?esc(s.feedTitle):'',s.date?esc(fmtDate(s.date)):''].filter(Boolean).join(' · ');
+  return `<a class="note-item" href="#f=${encodeURIComponent(s.id)}">`
+    +`<div class="note-title">${esc(s.title)}</div>`
+    +(meta?`<div class="note-loc">${meta}</div>`:'')
+    +(tags?`<div class="note-tags">${tags}</div>`:'')+`</a>`;
+}
+function visible(){
+  const q=qEl.value.trim().toLowerCase();
+  if(!q)return all;
+  const terms=q.split(/\s+/);
+  return all.filter(s=>{
+    const hay=(s.title+' '+(s.feedTitle||'')+' '+(s.tags||[]).join(' ')+' '+(s.body||'')).toLowerCase();
+    return terms.every(t=>hay.includes(t));
+  });
+}
+function renderList(){
+  const items=visible();
+  // Render per-item so one bad entry can't blank the whole tab.
+  let html='';
+  for(const s of items){try{html+=card(s);}catch(e){}}
+  listView.innerHTML=html||'<div class="msg">No matches</div>';
+  countEl.textContent=items.length+(items.length===1?' entry':' entries');
+}
+function showDetail(id){
+  const s=byId.get(id);
+  listView.style.display='none';detailView.style.display='block';window.scrollTo(0,0);
+  if(!s){detailView.innerHTML=`<a class="back" href="#">‹ Feeds</a><div class="msg">Entry not found.</div>`;return;}
+  const link=s.link?` · <a href="${esc(safeUrl(s.link))}" target="_blank" rel="noopener">source ↗</a>`:'';
+  const meta=[s.feedTitle?esc(s.feedTitle):'',s.date?esc(fmtDate(s.date)):''].filter(Boolean).join(' · ');
+  detailView.innerHTML=`<a class="back" href="#">‹ Feeds</a>`
+    +`<h1 class="detail-title">${esc(s.title||'')}</h1>`
+    +`<div class="note-loc">${meta}${link}</div>`
+    +`<article class="org">${renderMd(s.body||'')}</article>`;
+}
+function route(){
+  const m=location.hash.match(/^#f=(.+)$/);
+  if(m){showDetail(decodeURIComponent(m[1]));}
+  else{detailView.style.display='none';listView.style.display='block';}
+}
+window.addEventListener('hashchange',route);
+qEl.addEventListener('input',renderList);
+fetch('api/feeds').then(r=>{if(!r.ok)throw 0;return r.json();})
+  .then(fs=>{
+    all=(fs||[]).sort((a,b)=>(b.date||0)-(a.date||0));
+    byId=new Map(all.map(s=>[s.id,s]));
+    if(!all.length){listView.innerHTML='<div class="msg">No feed entries yet.</div>';countEl.textContent='0 entries';route();return;}
+    renderList();route();
+  })
+  .catch(()=>{listView.innerHTML='<div class="msg">Couldn’t load feeds.</div>';});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>

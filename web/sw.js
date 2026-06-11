@@ -12,7 +12,7 @@
 const CACHE = 'vulpea-v8';
 // NB: precache './' (the canonical start URL), NOT 'index.html' — the latter
 // 301-redirects to '/', and a redirected response cannot be cached/served safely.
-const SHELL = ['./', 'notes.html', 'bookmarks.html', 'saves.html', 'journal.html', 'tasks.html', 'org.js', 'app.css', 'manifest.json', 'icon.svg'];
+const SHELL = ['./', 'notes.html', 'bookmarks.html', 'saves.html', 'feeds.html', 'journal.html', 'tasks.html', 'org.js', 'app.css', 'manifest.json', 'icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
